@@ -1,0 +1,282 @@
+---
+// Página de registro de cliente
+import PublicLayout from '../layouts/PublicLayout.astro';
+---
+
+<PublicLayout title="Registro de Cliente">
+  <div class="register-container">
+    <div class="register-card">
+      <div class="register-header">
+        <div class="logo">📚</div>
+        <h1>Crear Cuenta</h1>
+        <p>Regístrate para comenzar a comprar</p>
+      </div>
+      
+      <form id="registerForm" class="register-form">
+        <div id="errorMessage" class="alert alert-error" style="display: none;"></div>
+        <div id="successMessage" class="alert alert-success" style="display: none;"></div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="nombre" class="form-label">Nombre Completo</label>
+            <input 
+              type="text" 
+              id="nombre" 
+              name="nombre" 
+              class="form-input" 
+              placeholder="Tu nombre"
+              required
+            />
+          </div>
+          
+          <div class="form-group">
+            <label for="email" class="form-label">Correo Electrónico</label>
+            <input 
+              type="email" 
+              id="email" 
+              name="email" 
+              class="form-input" 
+              placeholder="tu@email.com"
+              required
+            />
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="password" class="form-label">Contraseña</label>
+          <input 
+            type="password" 
+            id="password" 
+            name="password" 
+            class="form-input" 
+            placeholder="Mínimo 6 caracteres"
+            minlength="6"
+            required
+          />
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="telefono" class="form-label">Teléfono</label>
+            <input 
+              type="tel" 
+              id="telefono" 
+              name="telefono" 
+              class="form-input" 
+              placeholder="5555-1234"
+            />
+          </div>
+          
+          <div class="form-group">
+            <label for="ciudad" class="form-label">Ciudad</label>
+            <input 
+              type="text" 
+              id="ciudad" 
+              name="ciudad" 
+              class="form-input" 
+              placeholder="Tu ciudad"
+            />
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="direccion" class="form-label">Dirección</label>
+          <input 
+            type="text" 
+            id="direccion" 
+            name="direccion" 
+            class="form-input" 
+            placeholder="Tu dirección completa"
+          />
+        </div>
+        
+        <button type="submit" class="btn btn-primary btn-full" id="submitBtn">
+          Crear Cuenta
+        </button>
+      </form>
+      
+      <div class="register-footer">
+        <p>¿Ya tienes cuenta? <a href="/login">Inicia sesión aquí</a></p>
+      </div>
+    </div>
+  </div>
+</PublicLayout>
+
+<script>
+  const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  
+  document.getElementById('registerForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submitBtn');
+    const errorMessage = document.getElementById('errorMessage');
+    const successMessage = document.getElementById('successMessage');
+    
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creando cuenta...';
+    errorMessage.style.display = 'none';
+    successMessage.style.display = 'none';
+    
+    const formData = {
+      nombre: document.getElementById('nombre').value,
+      email: document.getElementById('email').value,
+      password: document.getElementById('password').value,
+      telefono: document.getElementById('telefono').value,
+      ciudad: document.getElementById('ciudad').value,
+      direccion: document.getElementById('direccion').value,
+    };
+    
+    try {
+      const response = await fetch(`${API_URL}/auth/register-client`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.detail || 'Error al registrar');
+      }
+      
+      // Guardar token y usuario
+      localStorage.setItem('token', data.access_token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      
+      // Guardar en cookies
+      document.cookie = `token=${data.access_token}; path=/; max-age=86400`;
+      document.cookie = `user=${JSON.stringify(data.user)}; path=/; max-age=86400`;
+      
+      successMessage.textContent = '¡Cuenta creada exitosamente! Redirigiendo...';
+      successMessage.style.display = 'block';
+      
+      // Redirigir al catálogo
+      setTimeout(() => {
+        window.location.href = '/catalogo';
+      }, 1500);
+      
+    } catch (error) {
+      errorMessage.textContent = error.message;
+      errorMessage.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Crear Cuenta';
+    }
+  });
+</script>
+
+<style>
+  .register-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+  
+  .register-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 520px;
+    padding: 2.5rem;
+  }
+  
+  .register-header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+  
+  .logo {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+  }
+  
+  .register-header h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 0.5rem;
+  }
+  
+  .register-header p {
+    color: #64748b;
+  }
+  
+  .register-form {
+    margin-bottom: 1.5rem;
+  }
+  
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  
+  .form-group {
+    margin-bottom: 1.25rem;
+  }
+  
+  .form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: #374151;
+  }
+  
+  .form-input {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+  }
+  
+  .form-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+  }
+  
+  .btn-full {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1rem;
+  }
+  
+  .register-footer {
+    text-align: center;
+  }
+  
+  .register-footer a {
+    color: #3b82f6;
+    text-decoration: none;
+    font-weight: 500;
+  }
+  
+  .alert {
+    padding: 0.875rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+  }
+  
+  .alert-error {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+  
+  .alert-success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+  }
+  
+  @media (max-width: 640px) {
+    .form-row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

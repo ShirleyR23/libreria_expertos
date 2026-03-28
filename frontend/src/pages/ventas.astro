@@ -1,0 +1,335 @@
+---
+// Página de gestión de ventas
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import TableComponent from '../components/TableComponent.astro';
+
+// Verificar que sea empleado o admin
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try {
+  user = userStr ? JSON.parse(userStr) : null;
+} catch (e) {}
+
+if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) {
+  return Astro.redirect('/login');
+}
+
+const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+// Obtener ventas
+let sales = [];
+try {
+  const response = await fetch(`${API_URL}/sales/all`, {
+    headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
+  });
+  if (response.ok) {
+    sales = await response.json();
+  }
+} catch (e) {
+  console.error('Error al cargar ventas:', e);
+}
+
+const columns = [
+  { key: 'id', label: 'ID' },
+  { key: 'tipo', label: 'Tipo', format: 'badge' },
+  { key: 'cliente_nombre', label: 'Cliente' },
+  { key: 'total', label: 'Total', format: 'currency' },
+  { key: 'status', label: 'Estado', format: 'badge' },
+  { key: 'created_at', label: 'Fecha', format: 'date' },
+];
+---
+
+<DashboardLayout title="Ventas" userRole={user.role_name}>
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Registro de Ventas</h2>
+      <button id="newSaleBtn" class="btn btn-primary">+ Nueva Venta</button>
+    </div>
+    
+    <TableComponent 
+      columns={columns} 
+      data={sales}
+      emptyMessage="No hay ventas registradas"
+    />
+  </div>
+  
+  <!-- Modal para nueva venta -->
+  <div id="saleModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Nueva Venta</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <form id="saleForm">
+        <div class="form-group">
+          <label>Tipo de Venta</label>
+          <select id="saleTipo" class="form-input">
+            <option value="PRESENCIAL">Presencial</option>
+            <option value="ONLINE">Online</option>
+          </select>
+        </div>
+        
+        <div id="itemsContainer">
+          <div class="sale-item-row">
+            <div class="form-group">
+              <label>Libro</label>
+              <select class="book-select form-input" required>
+                <option value="">Seleccionar libro</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Cantidad</label>
+              <input type="number" class="quantity-input form-input" min="1" value="1" required />
+            </div>
+            <button type="button" class="btn btn-danger remove-item">&times;</button>
+          </div>
+        </div>
+        
+        <button type="button" id="addItemBtn" class="btn btn-secondary">+ Agregar Item</button>
+        
+        <div class="form-group">
+          <label>Notas</label>
+          <textarea id="saleNotas" class="form-input" rows="2"></textarea>
+        </div>
+        
+        <div class="sale-total">
+          <strong>Total: L <span id="saleTotal">0.00</span></strong>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Registrar Venta</button>
+      </form>
+    </div>
+  </div>
+</DashboardLayout>
+
+<script>
+  const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const token = localStorage.getItem('token');
+  
+  let books = [];
+  
+  // Cargar libros
+  async function loadBooks() {
+    try {
+      const response = await fetch(`${API_URL}/books/catalog?solo_disponibles=true`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      books = await response.json();
+      
+      updateBookSelects();
+    } catch (error) {
+      console.error('Error al cargar libros:', error);
+    }
+  }
+  
+  function updateBookSelects() {
+    document.querySelectorAll('.book-select').forEach(select => {
+      const currentValue = select.value;
+      select.innerHTML = '<option value="">Seleccionar libro</option>' +
+        books.map(b => `<option value="${b.id}" data-price="${b.precio}">${b.nombre} (L ${b.precio}) - Stock: ${b.stock}</option>`).join('');
+      select.value = currentValue;
+    });
+  }
+  
+  // Modal
+  const modal = document.getElementById('saleModal');
+  document.getElementById('newSaleBtn')?.addEventListener('click', () => {
+    loadBooks();
+    modal.style.display = 'flex';
+  });
+  
+  document.querySelector('.modal-close')?.addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+  
+  // Add item
+  document.getElementById('addItemBtn')?.addEventListener('click', () => {
+    const container = document.getElementById('itemsContainer');
+    const newRow = document.createElement('div');
+    newRow.className = 'sale-item-row';
+    newRow.innerHTML = `
+      <div class="form-group">
+        <label>Libro</label>
+        <select class="book-select form-input" required>
+          <option value="">Seleccionar libro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Cantidad</label>
+        <input type="number" class="quantity-input form-input" min="1" value="1" required />
+      </div>
+      <button type="button" class="btn btn-danger remove-item">&times;</button>
+    `;
+    container.appendChild(newRow);
+    updateBookSelects();
+    updateTotal();
+  });
+  
+  // Remove item
+  document.getElementById('itemsContainer')?.addEventListener('click', (e) => {
+    if (e.target.classList.contains('remove-item')) {
+      e.target.closest('.sale-item-row').remove();
+      updateTotal();
+    }
+  });
+  
+  // Update total
+  function updateTotal() {
+    let total = 0;
+    document.querySelectorAll('.sale-item-row').forEach(row => {
+      const bookSelect = row.querySelector('.book-select');
+      const quantityInput = row.querySelector('.quantity-input');
+      
+      if (bookSelect.value && quantityInput.value) {
+        const option = bookSelect.options[bookSelect.selectedIndex];
+        const price = parseFloat(option.dataset.price) || 0;
+        const quantity = parseInt(quantityInput.value) || 0;
+        total += price * quantity;
+      }
+    });
+    
+    // Add 15% tax
+    total = total * 1.15;
+    document.getElementById('saleTotal').textContent = total.toFixed(2);
+  }
+  
+  document.getElementById('itemsContainer')?.addEventListener('change', updateTotal);
+  
+  // Submit form
+  document.getElementById('saleForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const items = [];
+    document.querySelectorAll('.sale-item-row').forEach(row => {
+      const bookId = row.querySelector('.book-select').value;
+      const cantidad = parseInt(row.querySelector('.quantity-input').value);
+      if (bookId && cantidad) {
+        items.push({ libro_id: parseInt(bookId), cantidad });
+      }
+    });
+    
+    if (items.length === 0) {
+      alert('Debes agregar al menos un item');
+      return;
+    }
+    
+    const saleData = {
+      tipo: document.getElementById('saleTipo').value,
+      items,
+      notas: document.getElementById('saleNotas').value
+    };
+    
+    try {
+      const response = await fetch(`${API_URL}/sales/presencial`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(saleData),
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Error al registrar venta');
+      }
+      
+      modal.style.display = 'none';
+      window.location.reload();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+</script>
+
+<style>
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  
+  .modal-content {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+  }
+  
+  #saleForm {
+    padding: 1.5rem;
+  }
+  
+  .sale-item-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr auto;
+    gap: 1rem;
+    align-items: end;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+  }
+  
+  .form-group {
+    margin-bottom: 1rem;
+  }
+  
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+  }
+  
+  .form-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+  }
+  
+  .sale-total {
+    text-align: right;
+    font-size: 1.25rem;
+    margin: 1rem 0;
+    padding: 1rem;
+    background: #f0fdf4;
+    border-radius: 8px;
+  }
+  
+  .btn-danger {
+    background: #ef4444;
+    color: white;
+    padding: 0.5rem 1rem;
+  }
+  
+  .btn-secondary {
+    background: #e2e8f0;
+    color: #374151;
+    margin-bottom: 1rem;
+  }
+</style>

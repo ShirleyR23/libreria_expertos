@@ -1,0 +1,277 @@
+---
+// Página del Sistema Experto (solo admin y empleados)
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+
+// Verificar que sea empleado o admin
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try {
+  user = userStr ? JSON.parse(userStr) : null;
+} catch (e) {}
+
+if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) {
+  return Astro.redirect('/login');
+}
+
+const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+// Obtener datos del sistema experto
+let inventoryAlerts = { reposicion: [], compra_urgente: [], nuevos_bestsellers: [], resumen: {} };
+let promotionSuggestions = [];
+let salesAnalysis = {};
+
+try {
+  const [alertsRes, promoRes, analysisRes] = await Promise.all([
+    fetch(`${API_URL}/expert/inventory-alerts`, {
+      headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
+    }),
+    fetch(`${API_URL}/expert/promotion-suggestions`, {
+      headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
+    }),
+    fetch(`${API_URL}/expert/sales-analysis`, {
+      headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
+    })
+  ]);
+  
+  if (alertsRes.ok) inventoryAlerts = await alertsRes.json();
+  if (promoRes.ok) promotionSuggestions = await promoRes.json();
+  if (analysisRes.ok) salesAnalysis = await analysisRes.json();
+} catch (e) {
+  console.error('Error:', e);
+}
+---
+
+<DashboardLayout title="Sistema Experto" userRole={user.role_name}>
+  <div class="grid grid-3">
+    <div class="stat-card">
+      <div class="stat-value" style="color: #f59e0b;">{inventoryAlerts.resumen?.total_alertas_reposicion || 0}</div>
+      <div class="stat-label">Alertas de Reposición</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color: #ef4444;">{inventoryAlerts.resumen?.total_compras_urgentes || 0}</div>
+      <div class="stat-label">Compras Urgentes</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color: #22c55e;">{inventoryAlerts.resumen?.nuevos_bestsellers || 0}</div>
+      <div class="stat-label">Nuevos Bestsellers</div>
+    </div>
+  </div>
+  
+  <div class="grid grid-2 mt-4">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">🚨 Alertas de Inventario</h2>
+      </div>
+      
+      <div class="alerts-section">
+        <h3>Stock Crítico ({inventoryAlerts.reposicion?.length || 0})</h3>
+        {inventoryAlerts.reposicion?.length > 0 ? (
+          <ul class="alert-list">
+            {inventoryAlerts.reposicion.map(item => (
+              <li class="alert-item alert-warning">
+                <strong>{item.nombre}</strong>
+                <span>Stock: {item.stock_actual} (mín: {item.stock_minimo})</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="empty">No hay alertas de stock crítico</p>
+        )}
+        
+        <h3>Compras Urgentes ({inventoryAlerts.compra_urgente?.length || 0})</h3>
+        {inventoryAlerts.compra_urgente?.length > 0 ? (
+          <ul class="alert-list">
+            {inventoryAlerts.compra_urgente.map(item => (
+              <li class="alert-item alert-danger">
+                <strong>{item.nombre}</strong>
+                <span>{item.ventas_30_dias} ventas/30días, Stock: {item.stock_actual}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="empty">No hay compras urgentes</p>
+        )}
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">📊 Análisis de Ventas (30 días)</h2>
+      </div>
+      
+      <div class="analysis-section">
+        <div class="analysis-row">
+          <span>Ventas Totales:</span>
+          <strong>{salesAnalysis.ventas_totales || 0}</strong>
+        </div>
+        <div class="analysis-row">
+          <span>Ingresos Totales:</span>
+          <strong>L {(salesAnalysis.ingresos_totales || 0).toFixed(2)}</strong>
+        </div>
+        <div class="analysis-row">
+          <span>Promedio por Venta:</span>
+          <strong>L {(salesAnalysis.promedio_venta || 0).toFixed(2)}</strong>
+        </div>
+        
+        <h4>Top Libros Vendidos</h4>
+        {salesAnalysis.top_libros?.length > 0 ? (
+          <ul class="top-list">
+            {salesAnalysis.top_libros.map((libro, i) => (
+              <li>
+                <span>{i + 1}. {libro.nombre}</span>
+                <span class="count">{libro.vendidos} vendidos</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="empty">No hay datos disponibles</p>
+        )}
+      </div>
+    </div>
+  </div>
+  
+  <div class="card mt-4">
+    <div class="card-header">
+      <h2 class="card-title">🏷️ Sugerencias de Promoción</h2>
+    </div>
+    
+    {promotionSuggestions.length > 0 ? (
+      <div class="promotions-grid">
+        {promotionSuggestions.map(book => (
+          <div class="promotion-card">
+            <h4>{book.nombre}</h4>
+            <p class="author">{book.autor}</p>
+            <div class="promo-info">
+              <span class="stock">Stock: {book.stock}</span>
+              <span class="days">
+                {book.dias_sin_venta === 'Nunca' ? 'Sin ventas' : `${book.dias_sin_venta} días sin ventas`}
+              </span>
+            </div>
+            <span class="suggestion">Sugerencia: {book.descuento_recomendado} de descuento</span>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <p class="empty">No hay sugerencias de promoción en este momento</p>
+    )}
+  </div>
+</DashboardLayout>
+
+<style>
+  .mt-4 {
+    margin-top: 1.5rem;
+  }
+  
+  .alerts-section h3 {
+    margin: 1rem 0 0.5rem;
+    font-size: 1rem;
+    color: #64748b;
+  }
+  
+  .alert-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1.5rem;
+  }
+  
+  .alert-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+  }
+  
+  .alert-item.alert-warning {
+    background: #fef3c7;
+    color: #92400e;
+  }
+  
+  .alert-item.alert-danger {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+  
+  .analysis-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .analysis-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem;
+    background: #f8fafc;
+    border-radius: 6px;
+  }
+  
+  .analysis-section h4 {
+    margin-top: 1rem;
+    font-size: 0.875rem;
+    color: #64748b;
+    text-transform: uppercase;
+  }
+  
+  .top-list {
+    list-style: none;
+    padding: 0;
+  }
+  
+  .top-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  
+  .top-list .count {
+    color: #64748b;
+    font-size: 0.875rem;
+  }
+  
+  .promotions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+  
+  .promotion-card {
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    border-left: 4px solid #f59e0b;
+  }
+  
+  .promotion-card h4 {
+    margin-bottom: 0.25rem;
+  }
+  
+  .promotion-card .author {
+    color: #64748b;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .promo-info {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+  }
+  
+  .promotion-card .suggestion {
+    display: inline-block;
+    background: #fef3c7;
+    color: #92400e;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+  }
+  
+  .empty {
+    color: #64748b;
+    text-align: center;
+    padding: 1rem;
+  }
+</style>

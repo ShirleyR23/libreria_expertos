@@ -1,0 +1,164 @@
+---
+// Dashboard de Administrador
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+
+// Verificar que sea admin
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try {
+  user = userStr ? JSON.parse(userStr) : null;
+} catch (e) {}
+
+if (!user || user.role_name !== 'ADMIN') {
+  return Astro.redirect('/login');
+}
+
+// Obtener estadísticas
+const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+let stats = {
+  total_libros: 0,
+  stock_bajo: 0,
+  total_ventas: 0,
+  ingresos_totales: 0,
+  total_clientes: 0,
+  total_empleados: 0
+};
+
+try {
+  const response = await fetch(`${API_URL}/admin/dashboard-stats`, {
+    headers: {
+      'Authorization': `Bearer ${Astro.cookies.get('token')?.value}`
+    }
+  });
+  if (response.ok) {
+    stats = await response.json();
+  }
+} catch (e) {
+  console.error('Error al cargar estadísticas:', e);
+}
+---
+
+<DashboardLayout title="Dashboard Administrador" userRole="ADMIN">
+  <div class="grid grid-4">
+    <div class="stat-card">
+      <div class="stat-value">{stats.total_libros}</div>
+      <div class="stat-label">Total Libros</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color: #f59e0b;">{stats.stock_bajo}</div>
+      <div class="stat-label">Stock Bajo</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color: #22c55e;">{stats.total_ventas}</div>
+      <div class="stat-label">Ventas Totales</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color: #8b5cf6;">L {stats.ingresos_totales.toFixed(2)}</div>
+      <div class="stat-label">Ingresos Totales</div>
+    </div>
+  </div>
+  
+  <div class="grid grid-2 mt-4">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Accesos Rápidos</h2>
+      </div>
+      <div class="quick-links">
+        <a href="/inventario" class="quick-link">
+          <span class="icon">📚</span>
+          <span>Gestionar Inventario</span>
+        </a>
+        <a href="/ventas" class="quick-link">
+          <span class="icon">💰</span>
+          <span>Ver Ventas</span>
+        </a>
+        <a href="/compras" class="quick-link">
+          <span class="icon">📦</span>
+          <span>Compras a Proveedores</span>
+        </a>
+        <a href="/empleados" class="quick-link">
+          <span class="icon">👥</span>
+          <span>Gestionar Empleados</span>
+        </a>
+        <a href="/sistema-experto" class="quick-link">
+          <span class="icon">🤖</span>
+          <span>Sistema Experto</span>
+        </a>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Información del Sistema</h2>
+      </div>
+      <div class="system-info">
+        <div class="info-row">
+          <span>Total Clientes:</span>
+          <strong>{stats.total_clientes}</strong>
+        </div>
+        <div class="info-row">
+          <span>Total Empleados:</span>
+          <strong>{stats.total_empleados}</strong>
+        </div>
+        <div class="info-row">
+          <span>Versión:</span>
+          <strong>1.0.0</strong>
+        </div>
+        <div class="info-row">
+          <span>Estado:</span>
+          <span class="badge badge-success">Operativo</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</DashboardLayout>
+
+<style>
+  .quick-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .quick-link {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #1e293b;
+    transition: all 0.2s;
+  }
+  
+  .quick-link:hover {
+    background: #e0e7ff;
+  }
+  
+  .quick-link .icon {
+    font-size: 1.5rem;
+  }
+  
+  .system-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  
+  .info-row:last-child {
+    border-bottom: none;
+  }
+  
+  .mt-4 {
+    margin-top: 1.5rem;
+  }
+</style>

@@ -1,0 +1,221 @@
+---
+// Formulario de login
+---
+
+<div class="login-container">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="logo">📚</div>
+      <h1>Iniciar Sesión</h1>
+      <p>Ingresa tus credenciales para continuar</p>
+    </div>
+    
+    <form id="loginForm" class="login-form">
+      <div id="errorMessage" class="alert alert-error" style="display: none;"></div>
+      
+      <div class="form-group">
+        <label for="email" class="form-label">Correo Electrónico</label>
+        <input 
+          type="email" 
+          id="email" 
+          name="email" 
+          class="form-input" 
+          placeholder="tu@email.com"
+          required
+        />
+      </div>
+      
+      <div class="form-group">
+        <label for="password" class="form-label">Contraseña</label>
+        <input 
+          type="password" 
+          id="password" 
+          name="password" 
+          class="form-input" 
+          placeholder="••••••••"
+          required
+        />
+      </div>
+      
+      <button type="submit" class="btn btn-primary btn-full" id="submitBtn">
+        Iniciar Sesión
+      </button>
+    </form>
+    
+    <div class="login-footer">
+      <p>¿No tienes cuenta? <a href="/register">Regístrate aquí</a></p>
+      <p class="demo-accounts">
+        <small>Cuentas de demo:</small><br>
+        <small><strong>admin@libreria.com</strong> / admin123</small><br>
+        <small><strong>empleado@libreria.com</strong> / empleado123</small><br>
+        <small><strong>cliente@ejemplo.com</strong> / cliente123</small>
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  
+  document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submitBtn') as HTMLButtonElement;
+    const errorMessage = document.getElementById('errorMessage');
+    
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Iniciando sesión...';
+    errorMessage.style.display = 'none';
+    
+    const email = (document.getElementById('email') as HTMLInputElement).value;
+    const password = (document.getElementById('password') as HTMLInputElement).value;
+    
+    try {
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.detail || 'Error al iniciar sesión');
+      }
+      
+      // Guardar token y usuario
+      localStorage.setItem('token', data.access_token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      
+      // Guardar en cookies para SSR
+      document.cookie = `token=${data.access_token}; path=/; max-age=86400`;
+      document.cookie = `user=${JSON.stringify(data.user)}; path=/; max-age=86400`;
+      
+      // Redirigir según rol
+      const role = data.user.role_name;
+      if (role === 'ADMIN') {
+        window.location.href = '/dashboard-admin';
+      } else if (role === 'EMPLEADO') {
+        window.location.href = '/dashboard-empleado';
+      } else {
+        window.location.href = '/catalogo';
+      }
+      
+    } catch (error) {
+      errorMessage.textContent = error.message;
+      errorMessage.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Iniciar Sesión';
+    }
+  });
+</script>
+
+<style>
+  .login-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+  
+  .login-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 420px;
+    padding: 2.5rem;
+  }
+  
+  .login-header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+  
+  .logo {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+  }
+  
+  .login-header h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 0.5rem;
+  }
+  
+  .login-header p {
+    color: #64748b;
+  }
+  
+  .login-form {
+    margin-bottom: 1.5rem;
+  }
+  
+  .form-group {
+    margin-bottom: 1.25rem;
+  }
+  
+  .form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: #374151;
+  }
+  
+  .form-input {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+  }
+  
+  .form-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+  }
+  
+  .btn-full {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1rem;
+  }
+  
+  .login-footer {
+    text-align: center;
+  }
+  
+  .login-footer a {
+    color: #3b82f6;
+    text-decoration: none;
+    font-weight: 500;
+  }
+  
+  .login-footer a:hover {
+    text-decoration: underline;
+  }
+  
+  .demo-accounts {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+    color: #6b7280;
+  }
+  
+  .alert {
+    padding: 0.875rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+  }
+  
+  .alert-error {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+</style>

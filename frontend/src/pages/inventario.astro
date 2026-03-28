@@ -1,0 +1,287 @@
+---
+// Página de gestión de inventario
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import TableComponent from '../components/TableComponent.astro';
+
+// Verificar que sea empleado o admin
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try {
+  user = userStr ? JSON.parse(userStr) : null;
+} catch (e) {}
+
+if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) {
+  return Astro.redirect('/login');
+}
+
+const isAdmin = user.role_name === 'ADMIN';
+
+const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+// Obtener inventario
+let books = [];
+try {
+  const response = await fetch(`${API_URL}/books/inventory/all`, {
+    headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
+  });
+  if (response.ok) {
+    books = await response.json();
+  }
+} catch (e) {
+  console.error('Error al cargar inventario:', e);
+}
+
+const columns = [
+  { key: 'id', label: 'ID' },
+  { key: 'nombre', label: 'Nombre' },
+  { key: 'autor', label: 'Autor' },
+  { key: 'isbn', label: 'ISBN' },
+  { key: 'stock', label: 'Stock' },
+  { key: 'precio', label: 'Precio', format: 'currency' },
+  { key: 'es_bestseller', label: 'Bestseller', format: 'badge' },
+];
+---
+
+<DashboardLayout title="Inventario" userRole={user.role_name}>
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Gestión de Inventario</h2>
+      {isAdmin && (
+        <button id="addBookBtn" class="btn btn-primary">+ Nuevo Libro</button>
+      )}
+    </div>
+    
+    <TableComponent 
+      columns={columns} 
+      data={books}
+      emptyMessage="No hay libros en el inventario"
+      actions={isAdmin}
+    >
+    </TableComponent>
+  </div>
+  
+  {isAdmin && (
+    <div id="bookModal" class="modal" style="display: none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="modalTitle">Nuevo Libro</h3>
+          <button class="modal-close">&times;</button>
+        </div>
+        <form id="bookForm">
+          <input type="hidden" id="bookId" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>Nombre</label>
+              <input type="text" id="bookNombre" class="form-input" required />
+            </div>
+            <div class="form-group">
+              <label>ISBN</label>
+              <input type="text" id="bookIsbn" class="form-input" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Autor</label>
+              <input type="text" id="bookAutor" class="form-input" required />
+            </div>
+            <div class="form-group">
+              <label>Precio</label>
+              <input type="number" id="bookPrecio" class="form-input" step="0.01" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Stock</label>
+              <input type="number" id="bookStock" class="form-input" required />
+            </div>
+            <div class="form-group">
+              <label>Categoría</label>
+              <select id="bookCategoria" class="form-input">
+                <option value="1">Ficción</option>
+                <option value="2">No Ficción</option>
+                <option value="3">Ciencia</option>
+                <option value="4">Tecnología</option>
+                <option value="5">Historia</option>
+                <option value="6">Arte</option>
+                <option value="7">Literatura</option>
+                <option value="8">Infantil</option>
+                <option value="9">Académico</option>
+                <option value="10">Filosofía</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Descripción</label>
+            <textarea id="bookDescripcion" class="form-input" rows="3"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </form>
+      </div>
+    </div>
+  )}
+</DashboardLayout>
+
+<script>
+  const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const token = localStorage.getItem('token');
+  
+  // Modal functionality
+  const modal = document.getElementById('bookModal');
+  const addBtn = document.getElementById('addBookBtn');
+  const closeBtn = document.querySelector('.modal-close');
+  
+  addBtn?.addEventListener('click', () => {
+    document.getElementById('bookForm').reset();
+    document.getElementById('bookId').value = '';
+    document.getElementById('modalTitle').textContent = 'Nuevo Libro';
+    modal.style.display = 'flex';
+  });
+  
+  closeBtn?.addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+  
+  // Form submit
+  document.getElementById('bookForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const bookId = document.getElementById('bookId').value;
+    const bookData = {
+      nombre: document.getElementById('bookNombre').value,
+      isbn: document.getElementById('bookIsbn').value,
+      autor: document.getElementById('bookAutor').value,
+      precio: parseFloat(document.getElementById('bookPrecio').value),
+      stock: parseInt(document.getElementById('bookStock').value),
+      categoria_id: parseInt(document.getElementById('bookCategoria').value),
+      descripcion: document.getElementById('bookDescripcion').value,
+      // Nota: Si el backend requiere año de publicación, agrégalo aquí
+    };
+    
+    try {
+      const url = bookId ? `${API_URL}/books/${bookId}` : `${API_URL}/books/`;
+      const method = bookId ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(bookData),
+      });
+      
+      if (!response.ok) throw new Error('Error al guardar');
+      
+      modal.style.display = 'none';
+      window.location.reload();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+  
+  // Global functions for edit/delete
+  window.editBook = async (id) => {
+    try {
+      const response = await fetch(`${API_URL}/books/${id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const book = await response.json();
+      
+      document.getElementById('bookId').value = book.id;
+      document.getElementById('bookNombre').value = book.nombre;
+      document.getElementById('bookIsbn').value = book.isbn;
+      document.getElementById('bookAutor').value = book.autor;
+      document.getElementById('bookPrecio').value = book.precio;
+      document.getElementById('bookStock').value = book.stock;
+      document.getElementById('bookCategoria').value = book.categoria_id;
+      document.getElementById('bookDescripcion').value = book.descripcion || '';
+      
+      document.getElementById('modalTitle').textContent = 'Editar Libro';
+      modal.style.display = 'flex';
+    } catch (error) {
+      alert('Error al cargar el libro');
+    }
+  };
+  
+  window.deleteBook = async (id) => {
+    if (!confirm('¿Estás seguro de eliminar este libro?')) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/books/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!response.ok) throw new Error('Error al eliminar');
+      window.location.reload();
+    } catch (error) {
+      alert(error.message);
+    }
+  };
+</script>
+
+<style>
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  
+  .modal-content {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+  }
+  
+  #bookForm {
+    padding: 1.5rem;
+  }
+  
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  
+  .form-group {
+    margin-bottom: 1rem;
+  }
+  
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+  }
+  
+  .form-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+  }
+</style>

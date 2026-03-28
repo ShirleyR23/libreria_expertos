@@ -1,0 +1,148 @@
+---
+// Página de historial de compras del cliente
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import TableComponent from '../components/TableComponent.astro';
+
+// Verificar que sea cliente
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try {
+  user = userStr ? JSON.parse(userStr) : null;
+} catch (e) {}
+
+if (!user || (user.role_name !== 'CLIENTE' && user.role_name !== 'ADMIN')) {
+  return Astro.redirect('/login');
+}
+
+const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+// Obtener compras del cliente
+let purchases = [];
+try {
+  const response = await fetch(`${API_URL}/sales/my-purchases`, {
+    headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
+  });
+  if (response.ok) {
+    purchases = await response.json();
+  }
+} catch (e) {
+  console.error('Error al cargar compras:', e);
+}
+
+const columns = [
+  { key: 'id', label: 'ID' },
+  { key: 'tipo', label: 'Tipo', format: 'badge' },
+  { key: 'status', label: 'Estado', format: 'badge' },
+  { key: 'total', label: 'Total', format: 'currency' },
+  { key: 'created_at', label: 'Fecha', format: 'date' },
+];
+---
+
+<DashboardLayout title="Mis Compras" userRole={user.role_name}>
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Historial de Compras</h2>
+    </div>
+    
+    <TableComponent 
+      columns={columns} 
+      data={purchases}
+      emptyMessage="No has realizado ninguna compra aún"
+    />
+  </div>
+  
+  {purchases.length > 0 && (
+    <div class="card mt-4">
+      <div class="card-header">
+        <h2 class="card-title">Detalle de Compras</h2>
+      </div>
+      <div class="purchases-detail">
+        {purchases.map(purchase => (
+          <div class="purchase-card">
+            <div class="purchase-header">
+              <div>
+                <strong>Compra #{purchase.id}</strong>
+                <span class={`badge badge-${purchase.status.toLowerCase()}`}>{purchase.status}</span>
+              </div>
+              <span class="purchase-total">L {purchase.total.toFixed(2)}</span>
+            </div>
+            {purchase.items && (
+              <div class="purchase-items">
+                {purchase.items.map(item => (
+                  <div class="item-row">
+                    <span>{item.cantidad}x {item.libro_nombre || `Libro #${item.libro_id}`}</span>
+                    <span>L {item.subtotal.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {purchase.invoice && (
+              <div class="invoice-info">
+                <small>Factura: {purchase.invoice.numero_factura}</small>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</DashboardLayout>
+
+<style>
+  .mt-4 {
+    margin-top: 1.5rem;
+  }
+  
+  .purchases-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .purchase-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem;
+  }
+  
+  .purchase-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  
+  .purchase-header > div {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .purchase-total {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #3b82f6;
+  }
+  
+  .purchase-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .item-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.875rem;
+    color: #64748b;
+  }
+  
+  .invoice-info {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e2e8f0;
+    color: #64748b;
+  }
+</style>

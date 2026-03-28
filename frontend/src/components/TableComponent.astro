@@ -1,0 +1,151 @@
+---
+// Componente de tabla reutilizable
+interface Column {
+  key: string;
+  label: string;
+  format?: 'currency' | 'date' | 'badge';
+}
+
+interface Props {
+  columns: Column[];
+  data: any[];
+  emptyMessage?: string;
+  actions?: boolean;
+}
+
+const { columns, data, emptyMessage = 'No hay datos disponibles', actions = false } = Astro.props;
+
+const formatValue = (value: any, format?: string) => {
+  if (format === 'currency' && value !== null && value !== undefined) {
+    return new Intl.NumberFormat('es-HN', {
+      style: 'currency',
+      currency: 'HNL'
+    }).format(value);
+  }
+  if (format === 'date' && value) {
+    return new Date(value).toLocaleDateString('es-HN');
+  }
+  return value ?? '-';
+};
+---
+
+<div class="table-container">
+  <table>
+    <thead>
+      <tr>
+        {columns.map(col => (
+          <th>{col.label}</th>
+        ))}
+        {actions && <th>Acciones</th>}
+      </tr>
+    </thead>
+    <tbody>
+      {data.length === 0 ? (
+        <tr>
+          <td colspan={columns.length + (actions ? 1 : 0)} class="empty-cell">
+            {emptyMessage}
+          </td>
+        </tr>
+      ) : (
+        data.map(row => (
+          <tr>
+            {columns.map(col => (
+              <td>
+                {col.format === 'badge' ? (
+                  <span class={`badge badge-${row[col.key]?.toString().toLowerCase() || 'default'}`}>
+                    {row[col.key]}
+                  </span>
+                ) : (
+                  formatValue(row[col.key], col.format)
+                )}
+              </td>
+            ))}
+            {actions && (
+              <td class="actions-cell">
+                {/* BOTONES DIRECTOS: Así evitamos el error de "row is not defined" */}
+                <button 
+                  class="btn btn-sm btn-primary" 
+                  onclick={`window.editBook(${row.id})`}
+                >
+                  Editar
+                </button>
+                <button 
+                  class="btn btn-sm btn-danger" 
+                  onclick={`window.deleteBook(${row.id})`}
+                >
+                  Eliminar
+                </button>
+              </td>
+            )}
+          </tr>
+        ))
+      )}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  /* Se mantienen tus estilos actuales */
+  .table-container {
+    overflow-x: auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  
+  th {
+    background: #f8fafc;
+    padding: 0.875rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  
+  td {
+    padding: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    color: #1e293b;
+  }
+  
+  tr:hover {
+    background: #f8fafc;
+  }
+  
+  .actions-cell {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  /* Estilos para los botones que acabamos de agregar */
+  .btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    border: none;
+  }
+
+  .btn-primary { background: #3b82f6; color: white; }
+  .btn-danger { background: #ef4444; color: white; }
+  
+  /* Tus badges... */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .badge-default { background: #f3f4f6; color: #374151; }
+</style>

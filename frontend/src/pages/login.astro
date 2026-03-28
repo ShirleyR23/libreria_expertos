@@ -1,0 +1,27 @@
+---
+// Página de login
+import PublicLayout from '../layouts/PublicLayout.astro';
+import LoginForm from '../components/LoginForm.astro';
+
+// Si ya está autenticado, redirigir
+const token = Astro.cookies.get('token')?.value;
+if (token) {
+  const userStr = Astro.cookies.get('user')?.value;
+  let user = null;
+  try {
+    user = userStr ? JSON.parse(userStr) : null;
+  } catch (e) {}
+  
+  if (user?.role_name === 'ADMIN') {
+    return Astro.redirect('/dashboard-admin');
+  } else if (user?.role_name === 'EMPLEADO') {
+    return Astro.redirect('/dashboard-empleado');
+  } else {
+    return Astro.redirect('/catalogo');
+  }
+}
+---
+
+<PublicLayout title="Iniciar Sesión">
+  <LoginForm />
+</PublicLayout>

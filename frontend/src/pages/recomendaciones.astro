@@ -1,0 +1,192 @@
+---
+// Página de recomendaciones para clientes
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import BookCard from '../components/BookCard.astro';
+
+// Verificar que sea cliente
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try {
+  user = userStr ? JSON.parse(userStr) : null;
+} catch (e) {}
+
+if (!user || (user.role_name !== 'CLIENTE' && user.role_name !== 'ADMIN')) {
+  return Astro.redirect('/login');
+}
+
+const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+// Obtener recomendaciones
+let recommendations = [];
+try {
+  const response = await fetch(`${API_URL}/expert/recommendations?limit=8`, {
+    headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
+  });
+  if (response.ok) {
+    recommendations = await response.json();
+  }
+} catch (e) {
+  console.error('Error al cargar recomendaciones:', e);
+}
+---
+
+<DashboardLayout title="Recomendaciones para Ti" userRole={user.role_name}>
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">⭐ Recomendaciones Personalizadas</h2>
+    </div>
+    
+    <p class="description">
+      Basado en tus compras anteriores y preferencias, te recomendamos estos libros:
+    </p>
+    
+    {recommendations.length > 0 ? (
+      <div class="recommendations-grid">
+        {recommendations.map(book => (
+          <div class="recommendation-card">
+            <div class="book-image">
+              <div class="book-placeholder">📖</div>
+              {book.es_bestseller && <span class="bestseller-badge">⭐ Bestseller</span>}
+            </div>
+            <div class="book-info">
+              <span class="recommendation-reason">{book.razon_recomendacion}</span>
+              <h3>{book.nombre}</h3>
+              <p class="author">por {book.autor}</p>
+              <p class="price">L {book.precio.toFixed(2)}</p>
+              <p class={`stock ${book.stock < 5 ? 'low' : ''}`}>
+                {book.stock > 0 ? `${book.stock} disponibles` : 'Sin stock'}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div class="empty-state">
+        <p>No tenemos recomendaciones personalizadas en este momento.</p>
+        <a href="/catalogo" class="btn btn-primary">Explorar Catálogo</a>
+      </div>
+    )}
+  </div>
+  
+  <div class="card mt-4">
+    <div class="card-header">
+      <h2 class="card-title">🔥 Los Más Vendidos</h2>
+    </div>
+    <p class="description">
+      Descubre los libros que más están gustando a nuestros lectores.
+    </p>
+    <div class="action-links">
+      <a href="/catalogo" class="btn btn-primary">Ver Catálogo Completo</a>
+    </div>
+  </div>
+</DashboardLayout>
+
+<style>
+  .description {
+    color: #64748b;
+    margin-bottom: 1.5rem;
+  }
+  
+  .recommendations-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1.5rem;
+  }
+  
+  .recommendation-card {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.2s;
+  }
+  
+  .recommendation-card:hover {
+    transform: translateY(-4px);
+  }
+  
+  .book-image {
+    position: relative;
+    height: 150px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .book-placeholder {
+    font-size: 3rem;
+  }
+  
+  .bestseller-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: #f59e0b;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  
+  .book-info {
+    padding: 1rem;
+  }
+  
+  .recommendation-reason {
+    display: inline-block;
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .book-info h3 {
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+    line-height: 1.4;
+  }
+  
+  .author {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+  }
+  
+  .price {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #3b82f6;
+    margin-bottom: 0.25rem;
+  }
+  
+  .stock {
+    font-size: 0.875rem;
+    color: #22c55e;
+  }
+  
+  .stock.low {
+    color: #f59e0b;
+  }
+  
+  .empty-state {
+    text-align: center;
+    padding: 3rem;
+  }
+  
+  .empty-state p {
+    color: #64748b;
+    margin-bottom: 1rem;
+  }
+  
+  .mt-4 {
+    margin-top: 1.5rem;
+  }
+  
+  .action-links {
+    margin-top: 1rem;
+  }
+</style>

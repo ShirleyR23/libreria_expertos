@@ -1,0 +1,273 @@
+---
+// Página de catálogo público
+import PublicLayout from '../layouts/PublicLayout.astro';
+import BookCard from '../components/BookCard.astro';
+
+const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+// Obtener libros del backend
+let books = [];
+let categories = [];
+let error = null;
+
+try {
+  const [booksRes, categoriesRes] = await Promise.all([
+    fetch(`${API_URL}/books/catalog?limit=50`),
+    fetch(`${API_URL}/books/categories`)
+  ]);
+  
+  if (booksRes.ok) {
+    books = await booksRes.json();
+  }
+  if (categoriesRes.ok) {
+    categories = await categoriesRes.json();
+  }
+} catch (e) {
+  error = 'Error al cargar el catálogo';
+}
+
+// Verificar si hay usuario autenticado
+const token = Astro.cookies.get('token')?.value;
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try {
+  user = userStr ? JSON.parse(userStr) : null;
+} catch (e) {}
+---
+
+<PublicLayout title="Catálogo de Libros">
+  <nav class="catalog-nav">
+    <div class="nav-brand">
+      <span class="logo">📚</span>
+      <span>Librería</span>
+    </div>
+    <div class="nav-links">
+      {user ? (
+        <>
+          <span class="user-name">Hola, {user.nombre}</span>
+          <a href={user.role_name === 'ADMIN' ? '/dashboard-admin' : user.role_name === 'EMPLEADO' ? '/dashboard-empleado' : '/mis-compras'} class="btn btn-sm btn-primary">
+            Mi Cuenta
+          </a>
+          <button id="logoutBtn" class="btn btn-sm btn-outline">Cerrar Sesión</button>
+        </>
+      ) : (
+        <>
+          <a href="/login" class="btn btn-sm btn-outline">Iniciar Sesión</a>
+          <a href="/register" class="btn btn-sm btn-primary">Registrarse</a>
+        </>
+      )}
+    </div>
+  </nav>
+  
+  <main class="catalog-main">
+    <div class="catalog-header">
+      <h1>📚 Catálogo de Libros</h1>
+      <p>Descubre nuestra colección de libros</p>
+    </div>
+    
+    <div class="filters">
+      <div class="search-box">
+        <input 
+          type="text" 
+          id="searchInput" 
+          class="form-input" 
+          placeholder="Buscar por título, autor o ISBN..."
+        />
+        <button id="searchBtn" class="btn btn-primary">🔍 Buscar</button>
+      </div>
+      
+      <div class="category-filter">
+        <select id="categorySelect" class="form-input">
+          <option value="">Todas las categorías</option>
+          {categories.map(cat => (
+            <option value={cat.id}>{cat.name}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+    
+    {error && (
+      <div class="alert alert-error">{error}</div>
+    )}
+    
+    <div class="books-grid" id="booksGrid">
+      {books.map(book => (
+        <BookCard
+          id={book.id}
+          nombre={book.nombre}
+          autor={book.autor}
+          precio={book.precio}
+          stock={book.stock}
+          categoria={book.categoria?.name}
+          esBestseller={book.es_bestseller}
+          showActions={!!user && user.role_name === 'CLIENTE'}
+        />
+      ))}
+    </div>
+    
+    {books.length === 0 && !error && (
+      <div class="empty-state">
+        <p>No hay libros disponibles en este momento.</p>
+      </div>
+    )}
+  </main>
+</PublicLayout>
+
+<script>
+  const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  
+  // Logout
+  document.getElementById('logoutBtn')?.addEventListener('click', () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    document.cookie = 'user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    window.location.href = '/catalogo';
+  });
+  
+  // Búsqueda
+  document.getElementById('searchBtn')?.addEventListener('click', async () => {
+    const search = document.getElementById('searchInput').value;
+    const categoria_id = document.getElementById('categorySelect').value;
+    
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (categoria_id) params.append('categoria_id', categoria_id);
+    
+    try {
+      const response = await fetch(`${API_URL}/books/catalog?${params}`);
+      const books = await response.json();
+      updateBooksGrid(books);
+    } catch (error) {
+      console.error('Error al buscar:', error);
+    }
+  });
+  
+  // Filtrar por categoría
+  document.getElementById('categorySelect')?.addEventListener('change', async () => {
+    document.getElementById('searchBtn').click();
+  });
+  
+  function updateBooksGrid(books) {
+    const grid = document.getElementById('booksGrid');
+    
+    if (books.length === 0) {
+      grid.innerHTML = '<div class="empty-state"><p>No se encontraron libros.</p></div>';
+      return;
+    }
+    
+    grid.innerHTML = books.map(book => `
+      <div class="book-card">
+        <div class="book-image">
+          <div class="book-placeholder">📖</div>
+          ${book.es_bestseller ? '<span class="bestseller-badge">⭐ Bestseller</span>' : ''}
+          ${book.stock === 0 ? '<span class="out-of-stock">Agotado</span>' : ''}
+        </div>
+        <div class="book-info">
+          ${book.categoria ? `<span class="book-category">${book.categoria.name}</span>` : ''}
+          <h3 class="book-title">${book.nombre}</h3>
+          <p class="book-author">por ${book.autor}</p>
+          <p class="book-price">L ${book.precio.toFixed(2)}</p>
+          <p class="book-stock ${book.stock < 5 ? 'low-stock' : ''}">
+            ${book.stock > 0 ? `${book.stock} disponibles` : 'Sin stock'}
+          </p>
+        </div>
+      </div>
+    `).join('');
+  }
+</script>
+
+<style>
+  .catalog-nav {
+    background: white;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+  
+  .logo {
+    font-size: 1.5rem;
+  }
+  
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  
+  .user-name {
+    color: #64748b;
+  }
+  
+  .catalog-main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+  
+  .catalog-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    color: white;
+  }
+  
+  .catalog-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .filters {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+  
+  .search-box {
+    display: flex;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 300px;
+  }
+  
+  .search-box input {
+    flex: 1;
+  }
+  
+  .category-filter {
+    min-width: 200px;
+  }
+  
+  .books-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+  }
+  
+  .empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: white;
+  }
+  
+  .btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+  
+  .btn-outline {
+    background: transparent;
+    border: 2px solid #3b82f6;
+    color: #3b82f6;
+  }
+</style>

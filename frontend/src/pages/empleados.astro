@@ -1,0 +1,227 @@
+---
+// Página de gestión de empleados (solo admin)
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import TableComponent from '../components/TableComponent.astro';
+
+// Verificar que sea admin
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try {
+  user = userStr ? JSON.parse(userStr) : null;
+} catch (e) {}
+
+if (!user || user.role_name !== 'ADMIN') {
+  return Astro.redirect('/login');
+}
+
+const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+// Obtener empleados
+let employees = [];
+try {
+  const response = await fetch(`${API_URL}/admin/employees`, {
+    headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
+  });
+  if (response.ok) {
+    employees = await response.json();
+  }
+} catch (e) {
+  console.error('Error al cargar empleados:', e);
+}
+
+const columns = [
+  { key: 'id', label: 'ID' },
+  { key: 'nombre', label: 'Nombre' },
+  { key: 'email', label: 'Email' },
+  { key: 'activo', label: 'Estado', format: 'badge' },
+  { key: 'created_at', label: 'Fecha Registro', format: 'date' },
+];
+---
+
+<DashboardLayout title="Gestión de Empleados" userRole="ADMIN">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Empleados</h2>
+      <button id="addEmployeeBtn" class="btn btn-primary">+ Nuevo Empleado</button>
+    </div>
+    
+    <TableComponent 
+      columns={columns} 
+      data={employees}
+      emptyMessage="No hay empleados registrados"
+    />
+  </div>
+  
+  <!-- Modal para nuevo empleado -->
+  <div id="employeeModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Nuevo Empleado</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <form id="employeeForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nombre Completo</label>
+            <input type="text" id="empNombre" class="form-input" required />
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="empEmail" class="form-input" required />
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Contraseña</label>
+            <input type="password" id="empPassword" class="form-input" minlength="6" required />
+          </div>
+          <div class="form-group">
+            <label>Salario</label>
+            <input type="number" id="empSalario" class="form-input" step="0.01" required />
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Turno</label>
+            <select id="empTurno" class="form-input">
+              <option value="Mañana">Mañana</option>
+              <option value="Tarde">Tarde</option>
+              <option value="Completo">Completo</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Teléfono</label>
+            <input type="tel" id="empTelefono" class="form-input" />
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Dirección</label>
+          <input type="text" id="empDireccion" class="form-input" />
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Crear Empleado</button>
+      </form>
+    </div>
+  </div>
+</DashboardLayout>
+
+<script>
+  const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const token = localStorage.getItem('token');
+  
+  // Modal
+  const modal = document.getElementById('employeeModal');
+  document.getElementById('addEmployeeBtn')?.addEventListener('click', () => {
+    document.getElementById('employeeForm').reset();
+    modal.style.display = 'flex';
+  });
+  
+  document.querySelector('.modal-close')?.addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+  
+  // Form submit
+  document.getElementById('employeeForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const employeeData = {
+      nombre: document.getElementById('empNombre').value,
+      email: document.getElementById('empEmail').value,
+      password: document.getElementById('empPassword').value,
+      salario: parseFloat(document.getElementById('empSalario').value),
+      turno: document.getElementById('empTurno').value,
+      telefono: document.getElementById('empTelefono').value,
+      direccion: document.getElementById('empDireccion').value,
+    };
+    
+    try {
+      const response = await fetch(`${API_URL}/admin/employees`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(employeeData),
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Error al crear empleado');
+      }
+      
+      modal.style.display = 'none';
+      window.location.reload();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+</script>
+
+<style>
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  
+  .modal-content {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+  }
+  
+  #employeeForm {
+    padding: 1.5rem;
+  }
+  
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  
+  .form-group {
+    margin-bottom: 1rem;
+  }
+  
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+  }
+  
+  .form-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+  }
+</style>

@@ -1,0 +1,310 @@
+---
+// Página de compras a proveedores (solo admin)
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import TableComponent from '../components/TableComponent.astro';
+
+// Verificar que sea admin
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try {
+  user = userStr ? JSON.parse(userStr) : null;
+} catch (e) {}
+
+if (!user || user.role_name !== 'ADMIN') {
+  return Astro.redirect('/login');
+}
+
+const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+// Obtener compras
+let purchases = [];
+try {
+  const response = await fetch(`${API_URL}/purchases/`, {
+    headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
+  });
+  if (response.ok) {
+    purchases = await response.json();
+  }
+} catch (e) {
+  console.error('Error al cargar compras:', e);
+}
+
+const columns = [
+  { key: 'id', label: 'ID' },
+  { key: 'proveedor_nombre', label: 'Proveedor' },
+  { key: 'total', label: 'Total', format: 'currency' },
+  { key: 'estado', label: 'Estado', format: 'badge' },
+  { key: 'fecha_compra', label: 'Fecha', format: 'date' },
+];
+---
+
+<DashboardLayout title="Compras a Proveedores" userRole="ADMIN">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Compras a Proveedores</h2>
+      <button id="newPurchaseBtn" class="btn btn-primary">+ Nueva Compra</button>
+    </div>
+    
+    <TableComponent 
+      columns={columns} 
+      data={purchases}
+      emptyMessage="No hay compras registradas"
+    />
+  </div>
+  
+  <!-- Modal para nueva compra -->
+  <div id="purchaseModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Nueva Compra</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <form id="purchaseForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Proveedor</label>
+            <input type="text" id="provNombre" class="form-input" required />
+          </div>
+          <div class="form-group">
+            <label>Contacto</label>
+            <input type="text" id="provContacto" class="form-input" />
+          </div>
+        </div>
+        
+        <div id="itemsContainer">
+          <div class="purchase-item-row">
+            <div class="form-group">
+              <label>Libro</label>
+              <select class="book-select form-input" required>
+                <option value="">Seleccionar libro</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Cantidad</label>
+              <input type="number" class="quantity-input form-input" min="1" value="1" required />
+            </div>
+            <div class="form-group">
+              <label>Costo Unit.</label>
+              <input type="number" class="cost-input form-input" step="0.01" min="0" required />
+            </div>
+            <button type="button" class="btn btn-danger remove-item">&times;</button>
+          </div>
+        </div>
+        
+        <button type="button" id="addItemBtn" class="btn btn-secondary">+ Agregar Item</button>
+        
+        <div class="form-group">
+          <label>Notas</label>
+          <textarea id="purchaseNotas" class="form-input" rows="2"></textarea>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Registrar Compra</button>
+      </form>
+    </div>
+  </div>
+</DashboardLayout>
+
+<script>
+  const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const token = localStorage.getItem('token');
+  
+  let books = [];
+  
+  // Cargar libros
+  async function loadBooks() {
+    try {
+      const response = await fetch(`${API_URL}/books/inventory/all`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      books = await response.json();
+      
+      updateBookSelects();
+    } catch (error) {
+      console.error('Error al cargar libros:', error);
+    }
+  }
+  
+  function updateBookSelects() {
+    document.querySelectorAll('.book-select').forEach(select => {
+      const currentValue = select.value;
+      select.innerHTML = '<option value="">Seleccionar libro</option>' +
+        books.map(b => `<option value="${b.id}">${b.nombre}</option>`).join('');
+      select.value = currentValue;
+    });
+  }
+  
+  // Modal
+  const modal = document.getElementById('purchaseModal');
+  document.getElementById('newPurchaseBtn')?.addEventListener('click', () => {
+    loadBooks();
+    modal.style.display = 'flex';
+  });
+  
+  document.querySelector('.modal-close')?.addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+  
+  // Add item
+  document.getElementById('addItemBtn')?.addEventListener('click', () => {
+    const container = document.getElementById('itemsContainer');
+    const newRow = document.createElement('div');
+    newRow.className = 'purchase-item-row';
+    newRow.innerHTML = `
+      <div class="form-group">
+        <label>Libro</label>
+        <select class="book-select form-input" required>
+          <option value="">Seleccionar libro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Cantidad</label>
+        <input type="number" class="quantity-input form-input" min="1" value="1" required />
+      </div>
+      <div class="form-group">
+        <label>Costo Unit.</label>
+        <input type="number" class="cost-input form-input" step="0.01" min="0" required />
+      </div>
+      <button type="button" class="btn btn-danger remove-item">&times;</button>
+    `;
+    container.appendChild(newRow);
+    updateBookSelects();
+  });
+  
+  // Remove item
+  document.getElementById('itemsContainer')?.addEventListener('click', (e) => {
+    if (e.target.classList.contains('remove-item')) {
+      e.target.closest('.purchase-item-row').remove();
+    }
+  });
+  
+  // Submit form
+  document.getElementById('purchaseForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const items = [];
+    document.querySelectorAll('.purchase-item-row').forEach(row => {
+      const bookId = row.querySelector('.book-select').value;
+      const cantidad = parseInt(row.querySelector('.quantity-input').value);
+      const costo = parseFloat(row.querySelector('.cost-input').value);
+      if (bookId && cantidad && costo) {
+        items.push({ libro_id: parseInt(bookId), cantidad, costo_unitario: costo });
+      }
+    });
+    
+    if (items.length === 0) {
+      alert('Debes agregar al menos un item');
+      return;
+    }
+    
+    const purchaseData = {
+      proveedor_nombre: document.getElementById('provNombre').value,
+      proveedor_contacto: document.getElementById('provContacto').value,
+      items,
+      notas: document.getElementById('purchaseNotas').value
+    };
+    
+    try {
+      const response = await fetch(`${API_URL}/purchases/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(purchaseData),
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Error al registrar compra');
+      }
+      
+      modal.style.display = 'none';
+      window.location.reload();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+</script>
+
+<style>
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  
+  .modal-content {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 700px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+  }
+  
+  #purchaseForm {
+    padding: 1.5rem;
+  }
+  
+  .purchase-item-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: 1rem;
+    align-items: end;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+  }
+  
+  .form-group {
+    margin-bottom: 1rem;
+  }
+  
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+  }
+  
+  .form-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+  }
+  
+  .btn-danger {
+    background: #ef4444;
+    color: white;
+    padding: 0.5rem 1rem;
+  }
+  
+  .btn-secondary {
+    background: #e2e8f0;
+    color: #374151;
+    margin-bottom: 1rem;
+  }
+</style>

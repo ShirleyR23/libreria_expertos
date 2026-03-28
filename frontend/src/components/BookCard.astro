@@ -1,0 +1,199 @@
+---
+// Componente de tarjeta de libro
+interface Props {
+  id: number;
+  nombre: string;
+  autor: string;
+  precio: number;
+  stock: number;
+  categoria?: string;
+  esBestseller?: boolean;
+  showActions?: boolean;
+}
+
+const { 
+  id, 
+  nombre, 
+  autor, 
+  precio, 
+  stock, 
+  categoria = '', 
+  esBestseller = false,
+  showActions = true 
+} = Astro.props;
+
+const disponible = stock > 0;
+const precioFormateado = new Intl.NumberFormat('es-HN', {
+  style: 'currency',
+  currency: 'HNL'
+}).format(precio);
+---
+
+<div class="book-card" data-book-id={id}>
+  <div class="book-image">
+    <div class="book-placeholder">📖</div>
+    {esBestseller && <span class="bestseller-badge">⭐ Bestseller</span>}
+    {!disponible && <span class="out-of-stock">Agotado</span>}
+  </div>
+  
+  <div class="book-info">
+    {categoria && <span class="book-category">{categoria}</span>}
+    <h3 class="book-title">{nombre}</h3>
+    <p class="book-author">por {autor}</p>
+    <p class="book-price">{precioFormateado}</p>
+    <p class={`book-stock ${stock < 5 ? 'low-stock' : ''}`}>
+      {disponible ? `${stock} disponibles` : 'Sin stock'}
+    </p>
+  </div>
+  
+  {showActions && (
+    <div class="book-actions">
+      {disponible ? (
+        <button class="btn btn-primary btn-buy" data-book-id={id} data-book-name={nombre} data-book-price={precio}>
+          🛒 Comprar
+        </button>
+      ) : (
+        <button class="btn btn-secondary" disabled>
+          Agotado
+        </button>
+      )}
+    </div>
+  )}
+</div>
+
+<style>
+  .book-card {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .book-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .book-image {
+    position: relative;
+    height: 180px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .book-placeholder {
+    font-size: 4rem;
+  }
+  
+  .bestseller-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: #f59e0b;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  
+  .out-of-stock {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  
+  .book-info {
+    padding: 1rem;
+    flex: 1;
+  }
+  
+  .book-category {
+    display: inline-block;
+    background: #e0e7ff;
+    color: #4338ca;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .book-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .book-author {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+  }
+  
+  .book-price {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #3b82f6;
+    margin-bottom: 0.25rem;
+  }
+  
+  .book-stock {
+    font-size: 0.875rem;
+    color: #22c55e;
+  }
+  
+  .book-stock.low-stock {
+    color: #f59e0b;
+  }
+  
+  .book-actions {
+    padding: 1rem;
+    border-top: 1px solid #e2e8f0;
+  }
+  
+  .btn {
+    width: 100%;
+    padding: 0.75rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .btn-primary {
+    background: #3b82f6;
+    color: white;
+  }
+  
+  .btn-primary:hover {
+    background: #2563eb;
+  }
+  
+  .btn-secondary {
+    background: #e2e8f0;
+    color: #64748b;
+  }
+  
+  .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+</style>

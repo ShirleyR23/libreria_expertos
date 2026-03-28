@@ -1,10 +1,10 @@
-# 📚 Sistema de Gestión para Librería
+# Sistema de Gestión para Librería
 
 Sistema completo de gestión para librería con arquitectura profesional, autenticación JWT, control de acceso basado en roles (RBAC) y sistema experto integrado.
 
 ---
 
-## 🚀 INICIO RÁPIDO
+## INICIO RÁPIDO
 
 ### Opción 1: Desarrollo Local (Sin Docker)
 
@@ -45,7 +45,7 @@ docker-compose up -d
 
 ---
 
-## 🔐 Credenciales de Demo
+##  Credenciales de Demo
 
 | Email | Contraseña | Rol | Acceso |
 |-------|------------|-----|--------|
@@ -81,22 +81,7 @@ libreria-system/
 
 ---
 
-## 🏗️ Arquitectura
-
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   FRONTEND      │     │    BACKEND      │     │   BASE DE DATOS │
-│   (Astro)       │────▶│   (FastAPI)     │────▶│  (SQLite/PG)    │
-│  localhost:4321 │     │  localhost:8000 │     │  libreria.db    │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                       │
-        │  REST API + JWT       │
-        └───────────────────────┘
-```
-
----
-
-## 📡 API Endpoints Principales
+##  API Endpoints Principales
 
 ### Autenticación
 ```
@@ -178,7 +163,7 @@ PUBLIC_API_URL=http://localhost:8000/api/v1
 
 ---
 
-## 🐳 Comandos Docker
+## Comandos Docker
 
 ```bash
 # Iniciar
@@ -196,7 +181,7 @@ docker-compose up -d --build
 
 ---
 
-## ⚠️ Solución de Problemas
+## Solución de Problemas
 
 ### Puerto 8000 ocupado
 ```bash
@@ -214,9 +199,3 @@ npm run dev -- --port 3000
 Verificar que el backend esté corriendo en el puerto correcto.
 
 ---
-
-## 📄 Licencia
-
-Proyecto educativo de código abierto.
-
-**Desarrollado con ❤️ usando Python 3.13.9, FastAPI y Astro**

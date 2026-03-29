@@ -33,7 +33,15 @@ class BookBase(BaseModel):
 
 class BookCreate(BookBase):
     """Schema para crear libro."""
-    pass
+    nombre: str
+    isbn: str
+    precio: Decimal
+    # Campos para la compra automática (todos opcionales)
+    proveedor_nombre: Optional[str] = Field(None, max_length=150)
+    proveedor_contacto: Optional[str] = Field(None, max_length=150)
+    proveedor_telefono: Optional[str] = Field(None, max_length=20)
+    cantidad_compra: Optional[int] = Field(None, ge=1)
+    costo_compra: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
 
 
 class BookUpdate(BaseModel):

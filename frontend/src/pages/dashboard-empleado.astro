@@ -81,15 +81,19 @@ try {
         {recentSales.length === 0 ? (
           <p class="empty">No hay ventas recientes</p>
         ) : (
-          recentSales.map(sale => (
-            <div class="sale-item">
-              <div class="sale-info">
-                <span class="sale-id">Venta #{sale.id}</span>
-                <span class={`badge badge-${sale.status.toLowerCase()}`}>{sale.status}</span>
+          recentSales.map(sale => {
+            // Convertir total a número de forma segura
+            const total = typeof sale.total === 'string' ? parseFloat(sale.total) : (sale.total || 0);
+            return (
+              <div class="sale-item">
+                <div class="sale-info">
+                  <span class="sale-id">Venta #{sale.id}</span>
+                  <span class={`badge badge-${(sale.status || 'pendiente').toLowerCase()}`}>{sale.status || 'PENDIENTE'}</span>
+                </div>
+                <span class="sale-total">L {total.toFixed(2)}</span>
               </div>
-              <span class="sale-total">L {sale.total.toFixed(2)}</span>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

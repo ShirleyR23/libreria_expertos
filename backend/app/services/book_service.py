@@ -87,6 +87,26 @@ class BookService:
         
         return new_book
     
+    
+    def create_book_from_dict(self, book_dict: dict, db: Session) -> Book:
+        """Crea un libro desde un diccionario (para uso interno con compra automática)."""
+        # Verificar ISBN único
+        existing = self.get_book_by_isbn(book_dict["isbn"])
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ya existe un libro con el ISBN: {book_dict['isbn']}"
+            )
+        
+        new_book = Book(**book_dict)
+        
+        db.add(new_book)
+        db.commit()
+        db.refresh(new_book)
+        
+        return new_book
+
+
     def update_book(self, book_id: int, book_data: BookUpdate) -> Book:
         """Actualiza un libro existente."""
         book = self.get_book_by_id(book_id)

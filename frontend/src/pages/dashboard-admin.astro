@@ -40,20 +40,24 @@ try {
 
 <DashboardLayout title="Dashboard Administrador" userRole="ADMIN">
   <div class="grid grid-4">
-    <div class="stat-card">
+    <div class="stat-card blue">
+    <div class="stat-icon">📘</div>
       <div class="stat-value">{stats.total_libros}</div>
       <div class="stat-label">Total Libros</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card orange">
+    <div class="stat-icon">⚠️</div>
       <div class="stat-value" style="color: #f59e0b;">{stats.stock_bajo}</div>
       <div class="stat-label">Stock Bajo</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card green">
+    <div class="stat-icon">🛒</div>
       <div class="stat-value" style="color: #22c55e;">{stats.total_ventas}</div>
       <div class="stat-label">Ventas Totales</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-value" style="color: #8b5cf6;">L {stats.ingresos_totales.toFixed(2)}</div>
+    <div class="stat-card purple">
+    <div class="stat-icon">💰</div>
+      <div class="stat-value" style="color: #8b5cf6;"> {stats.ingresos_totales.toFixed(2)} LPS </div>
       <div class="stat-label">Ingresos Totales</div>
     </div>
   </div>
@@ -64,28 +68,31 @@ try {
         <h2 class="card-title">Accesos Rápidos</h2>
       </div>
       <div class="quick-links">
-        <a href="/inventario" class="quick-link">
-          <span class="icon">📚</span>
-          <span>Gestionar Inventario</span>
-        </a>
-        <a href="/ventas" class="quick-link">
-          <span class="icon">💰</span>
-          <span>Ver Ventas</span>
-        </a>
-        <a href="/compras" class="quick-link">
-          <span class="icon">📦</span>
-          <span>Compras a Proveedores</span>
-        </a>
-        <a href="/empleados" class="quick-link">
-          <span class="icon">👥</span>
-          <span>Gestionar Empleados</span>
-        </a>
-        <a href="/sistema-experto" class="quick-link">
-          <span class="icon">🤖</span>
-          <span>Sistema Experto</span>
-        </a>
-      </div>
+  <a href="/inventario" class="quick-link">
+    <div class="quick-link-left">
+      <div class="quick-icon blue">📚</div>
+      <span>Gestionar Inventario</span>
     </div>
+    <span class="quick-arrow">›</span>
+  </a>
+
+  <a href="/empleados" class="quick-link">
+    <div class="quick-link-left">
+      <div class="quick-icon green">👥</div>
+      <span>Gestionar Empleados</span>
+    </div>
+    <span class="quick-arrow">›</span>
+  </a>
+
+  <a href="/sistema-experto" class="quick-link">
+    <div class="quick-link-left">
+      <div class="quick-icon purple">📊</div>
+      <span>Estadísticas</span>
+    </div>
+    <span class="quick-arrow">›</span>
+  </a>
+</div>
+</div>
     
     <div class="card">
       <div class="card-header">
@@ -93,19 +100,15 @@ try {
       </div>
       <div class="system-info">
         <div class="info-row">
-          <span>Total Clientes:</span>
+          <span>Total Clientes</span>
           <strong>{stats.total_clientes}</strong>
         </div>
         <div class="info-row">
-          <span>Total Empleados:</span>
+          <span>Total Empleados</span>
           <strong>{stats.total_empleados}</strong>
         </div>
         <div class="info-row">
-          <span>Versión:</span>
-          <strong>1.0.0</strong>
-        </div>
-        <div class="info-row">
-          <span>Estado:</span>
+          <span>Estado</span>
           <span class="badge badge-success">Operativo</span>
         </div>
       </div>
@@ -114,51 +117,227 @@ try {
 </DashboardLayout>
 
 <style>
-  .quick-links {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
+  /* ====== FONDO GENERAL ====== */
+body {
+  background: #f1f5f9;
+  font-family: 'Inter', sans-serif;
+  color: #1e293b;
+}
+
+/* ====== GRID ====== */
+.grid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.mt-4 {
+  margin-top: 2rem;
+}
+
+/* ====== TARJETAS GENERALES ====== */
+.card {
+  background: white;
+  border-radius: 18px;
+  padding: 1.5rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+  transition: all 0.25s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+}
+
+/* ====== KPI CARDS ====== */
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: white;
+  padding: 1.2rem 1.5rem;
+  border-radius: 18px;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.05);
+  transition: all 0.25s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+}
+
+/* ICONO */
+.stat-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+}
+
+/* COLORES */
+.blue .stat-icon {
+  background: #dbeafe;
+  color: #3b82f6;
+}
+
+.orange .stat-icon {
+  background: #ffedd5;
+  color: #f59e0b;
+}
+
+.green .stat-icon {
+  background: #dcfce7;
+  color: #22c55e;
+}
+
+.purple .stat-icon {
+  background: #ede9fe;
+  color: #8b5cf6;
+}
+
+/* TEXTO KPI */
+.stat-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+/* ====== HEADER DE TARJETAS ====== */
+.card-header {
+  margin-bottom: 1rem;
+}
+
+.card-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+/* ====== QUICK LINKS ====== */
+.quick-links {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.quick-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.2rem;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+  text-decoration: none;
+  color: #1e293b;
+  font-weight: 500;
+  transition: all 0.25s ease;
+}
+
+.quick-link:hover {
+  transform: translateY(-3px) scale(1.01);
+  background: linear-gradient(135deg, #e2e8f0, #cbd5f5);
+}
+
+/* CONTENIDO LINK */
+.quick-link-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.quick-icon {
+  width: 45px;
+  height: 45px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+}
+
+/* COLORES ICONOS */
+.quick-icon.blue {
+  background: #dbeafe;
+  color: #3b82f6;
+}
+
+.quick-icon.green {
+  background: #dcfce7;
+  color: #22c55e;
+}
+
+.quick-icon.purple {
+  background: #ede9fe;
+  color: #8b5cf6;
+}
+
+/* FLECHA */
+.quick-arrow {
+  font-size: 1.2rem;
+  opacity: 0.6;
+}
+
+/* ====== SYSTEM INFO ====== */
+.system-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-row strong {
+  font-size: 1.1rem;
+}
+
+/* ====== BADGE ====== */
+.badge {
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.badge-success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+/* ====== RESPONSIVE ====== */
+@media (max-width: 1024px) {
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr);
   }
+
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
   
-  .quick-link {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem;
-    background: #f8fafc;
-    border-radius: 8px;
-    text-decoration: none;
-    color: #1e293b;
-    transition: all 0.2s;
-  }
-  
-  .quick-link:hover {
-    background: #e0e7ff;
-  }
-  
-  .quick-link .icon {
-    font-size: 1.5rem;
-  }
-  
-  .system-info {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  
-  .info-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem 0;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  
-  .info-row:last-child {
-    border-bottom: none;
-  }
-  
-  .mt-4 {
-    margin-top: 1.5rem;
-  }
 </style>

@@ -114,6 +114,42 @@ const columns = [
             <label>Descripción</label>
             <textarea id="bookDescripcion" class="form-input" rows="3"></textarea>
           </div>
+
+          <!-- Sección: Compra al Proveedor (solo para nuevos libros) -->
+          <div id="compraSection" class="compra-section">
+            <div class="section-title">Datos de Compra al Proveedor</div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label>Nombre del Proveedor *</label>
+                <input type="text" id="provNombre" class="form-input" placeholder="Ej: Editorial XYZ" required />
+              </div>
+              <div class="form-group">
+                <label>Contacto</label>
+                <input type="text" id="provContacto" class="form-input" placeholder="Email de Contacto" />
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label>Teléfono</label>
+                <input type="text" id="provTelefono" class="form-input" placeholder="Teléfono del proveedor" />
+              </div>
+              <div class="form-group">
+                <label>Cantidad Comprada *</label>
+                <input type="number" id="cantidadCompra" class="form-input" min="1" value="1" required />
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label>Costo Unitario de Compra *</label>
+              <input type="number" id="costoCompra" class="form-input" step="0.01" min="0" placeholder="Precio de compra" required />
+            </div>
+            
+            <div class="info-box">
+              <small>Al guardar, se creará automáticamente el registro de compra al proveedor y se actualizará el inventario.</small>
+            </div>
+          </div>
           <button type="submit" class="btn btn-primary">Guardar</button>
         </form>
       </div>
@@ -129,11 +165,20 @@ const columns = [
   const modal = document.getElementById('bookModal');
   const addBtn = document.getElementById('addBookBtn');
   const closeBtn = document.querySelector('.modal-close');
+  const compraSection = document.getElementById('compraSection');
   
   addBtn?.addEventListener('click', () => {
     document.getElementById('bookForm').reset();
     document.getElementById('bookId').value = '';
     document.getElementById('modalTitle').textContent = 'Nuevo Libro';
+
+    // Mostrar sección de compra para nuevos libros
+    if (compraSection) compraSection.style.display = 'block';
+    
+    // Hacer campos de compra requeridos
+    document.getElementById('provNombre').required = true;
+    document.getElementById('cantidadCompra').required = true;
+    document.getElementById('costoCompra').required = true;
     modal.style.display = 'flex';
   });
   
@@ -146,6 +191,7 @@ const columns = [
     e.preventDefault();
     
     const bookId = document.getElementById('bookId').value;
+    const isNewBook = !bookId;
     const bookData = {
       nombre: document.getElementById('bookNombre').value,
       isbn: document.getElementById('bookIsbn').value,
@@ -157,6 +203,19 @@ const columns = [
       // Nota: Si el backend requiere año de publicación, agrégalo aquí
     };
     
+    // Si es nuevo libro, agregar datos de compra
+    if (isNewBook) {
+      bookData.proveedor_nombre = document.getElementById('provNombre').value;
+      bookData.proveedor_contacto = document.getElementById('provContacto').value;
+      bookData.proveedor_telefono = document.getElementById('provTelefono').value;
+      bookData.cantidad_compra = parseInt(document.getElementById('cantidadCompra').value);
+      bookData.costo_compra = parseFloat(document.getElementById('costoCompra').value);
+      // No enviamos stock, el backend lo calcula desde la compra
+    } else {
+      // Si es edición, enviar stock actual
+      bookData.stock = parseInt(document.getElementById('bookStock').value);
+    }
+
     try {
       const url = bookId ? `${API_URL}/books/${bookId}` : `${API_URL}/books/`;
       const method = bookId ? 'PUT' : 'POST';
@@ -196,6 +255,8 @@ const columns = [
       document.getElementById('bookCategoria').value = book.categoria_id;
       document.getElementById('bookDescripcion').value = book.descripcion || '';
       
+      // Ocultar sección de compra en edición
+      if (compraSection) compraSection.style.display = 'none';
       document.getElementById('modalTitle').textContent = 'Editar Libro';
       modal.style.display = 'flex';
     } catch (error) {

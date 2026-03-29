@@ -50,7 +50,7 @@ class AuthService:
         access_token = create_access_token(
             data={
                 "sub": str(user.id),
-                "role": user.role_name,
+                "role_name": user.role_name,
                 "email": user.email,
                 "nombre": user.nombre
             },
@@ -109,7 +109,7 @@ class AuthService:
         access_token = create_access_token(
             data={
                 "sub": str(new_user.id),
-                "role": new_user.role_name,
+                "role_name": new_user.role_name,
                 "email": new_user.email,
                 "nombre": new_user.nombre
             },

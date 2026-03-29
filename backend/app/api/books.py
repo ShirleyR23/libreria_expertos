@@ -10,6 +10,10 @@ from app.schemas.book import BookResponse, BookCreate, BookUpdate, BookCategoryR
 from app.services.book_service import BookService
 from app.utils.dependencies import get_current_user_optional, require_empleado, require_admin, get_current_user
 
+from app.services.purchase_service import PurchaseService
+from app.schemas.purchase import PurchaseCreate, PurchaseItemCreate
+from decimal import Decimal
+
 router = APIRouter(prefix="/books", tags=["Libros"])
 
 
@@ -104,6 +108,57 @@ def create_book(
     Crea un nuevo libro (solo admin).
     """
     book_service = BookService(db)
+    # Verificar si viene con datos de compra
+    tiene_compra = (
+        book_data.proveedor_nombre and 
+        book_data.cantidad_compra and 
+        book_data.costo_compra
+    )
+    
+    if tiene_compra:
+        # Crear libro con stock=0 (la compra lo incrementará)
+        book_dict = {
+            "nombre": book_data.nombre,
+            "isbn": book_data.isbn,
+            "autor": book_data.autor,
+            "descripcion": book_data.descripcion,
+            "categoria_id": book_data.categoria_id,
+            "editorial": book_data.editorial,
+            "anio_publicacion": book_data.anio_publicacion,
+            "precio": book_data.precio,
+            "stock": 0,  # Stock inicial 0
+            "stock_minimo": book_data.stock_minimo,
+            "activo": True
+        }
+        
+        # Crear libro usando diccionario
+        new_book = book_service.create_book_from_dict(book_dict, db)
+        
+        # Crear la compra automática
+        purchase_service = PurchaseService(db)
+        empleado_id = current_user.employee.id if current_user.employee else current_user.id
+        
+        purchase_data = PurchaseCreate(
+            proveedor_nombre=book_data.proveedor_nombre,
+            proveedor_contacto=book_data.proveedor_contacto,
+            proveedor_telefono=book_data.proveedor_telefono,
+            items=[
+                PurchaseItemCreate(
+                    libro_id=new_book.id,
+                    cantidad=book_data.cantidad_compra,
+                    costo_unitario=book_data.costo_compra
+                )
+            ],
+            notas=f"Compra automática por ingreso de nuevo libro: {new_book.nombre} (ISBN: {book_data.isbn})"
+        )
+        
+        purchase_service.create_purchase(purchase_data, empleado_id)
+        
+        # Refrescar el libro para obtener el stock actualizado
+        db.refresh(new_book)
+        return new_book
+    
+    # Si no hay datos de compra, crear libro normalmente
     return book_service.create_book(book_data)
 
 

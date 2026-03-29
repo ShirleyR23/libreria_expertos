@@ -26,13 +26,7 @@ def create_purchase(
     - Actualización automática de inventario
     - Registra el empleado que realizó la compra
     """
-    empleado_id = current_user.employee.id if current_user.employee else None
-    
-    if not empleado_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El administrador debe tener perfil de empleado"
-        )
+    empleado_id = current_user.employee.id if current_user.employee else current_user.id
     
     purchase_service = PurchaseService(db)
     return purchase_service.create_purchase(purchase_data, empleado_id)

@@ -57,7 +57,7 @@ def create_presencial_sale(
     - Ventas en tienda física
     - Puede asociarse a un cliente o ser anónima
     """
-    empleado_id = current_user.employee.id if current_user.employee else None
+    empleado_id = current_user.employee.id if current_user.employee else current_user.id
     
     if not empleado_id:
         raise HTTPException(

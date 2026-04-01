@@ -9,16 +9,13 @@ from app.core.constants import BookCategory
 
 
 class BookCategoryResponse(BaseModel):
-    """Schema para categoría de libro."""
     model_config = ConfigDict(from_attributes=True)
-    
     id: int
     name: BookCategory
     description: Optional[str] = None
 
 
 class BookBase(BaseModel):
-    """Base para schemas de libro."""
     nombre: str = Field(..., min_length=1, max_length=255)
     isbn: str = Field(..., min_length=10, max_length=20)
     autor: str = Field(..., min_length=1, max_length=150)
@@ -29,14 +26,13 @@ class BookBase(BaseModel):
     precio: Decimal = Field(..., ge=0, decimal_places=2)
     stock: int = Field(default=0, ge=0)
     stock_minimo: int = Field(default=5, ge=0)
+    imagen_url: Optional[str] = Field(None, max_length=500)
+    pdf_url: Optional[str] = Field(None, max_length=500)
+    pdf_preview_pages: Optional[int] = Field(3, ge=1, le=20)
 
 
 class BookCreate(BookBase):
-    """Schema para crear libro."""
-    nombre: str
-    isbn: str
-    precio: Decimal
-    # Campos para la compra automática (todos opcionales)
+    """Schema para crear libro. Incluye campos opcionales de compra al proveedor."""
     proveedor_nombre: Optional[str] = Field(None, max_length=150)
     proveedor_contacto: Optional[str] = Field(None, max_length=150)
     proveedor_telefono: Optional[str] = Field(None, max_length=20)
@@ -45,7 +41,6 @@ class BookCreate(BookBase):
 
 
 class BookUpdate(BaseModel):
-    """Schema para actualizar libro."""
     nombre: Optional[str] = Field(None, min_length=1, max_length=255)
     isbn: Optional[str] = Field(None, min_length=10, max_length=20)
     autor: Optional[str] = Field(None, min_length=1, max_length=150)
@@ -57,13 +52,16 @@ class BookUpdate(BaseModel):
     stock: Optional[int] = Field(None, ge=0)
     stock_minimo: Optional[int] = Field(None, ge=0)
     activo: Optional[bool] = None
+    imagen_url: Optional[str] = Field(None, max_length=500)
+    pdf_url: Optional[str] = Field(None, max_length=500)
+    pdf_preview_pages: Optional[int] = Field(3, ge=1, le=20)
 
 
 class BookResponse(BookBase):
-    """Schema de respuesta para libro."""
+    """imagen_url ya viene de BookBase — no se duplica aquí."""
     model_config = ConfigDict(from_attributes=True)
-    
     id: int
+    has_pdf: Optional[bool] = None  # True si tiene PDF disponible
     categoria: Optional[BookCategoryResponse] = None
     disponible: bool
     necesita_reposicion: bool
@@ -72,5 +70,6 @@ class BookResponse(BookBase):
     ventas_ultimos_30_dias: int
     ultima_venta: Optional[datetime] = None
     activo: bool
+    precio_original: Optional[Decimal] = None  # Precio antes del descuento (None = sin descuento activo)
     created_at: datetime
     updated_at: datetime

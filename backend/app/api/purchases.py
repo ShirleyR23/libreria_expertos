@@ -27,7 +27,7 @@ def create_purchase(
     - Registra el empleado que realizó la compra
     """
     empleado_id = current_user.employee.id if current_user.employee else current_user.id
-    
+
     purchase_service = PurchaseService(db)
     return purchase_service.create_purchase(purchase_data, empleado_id)
 

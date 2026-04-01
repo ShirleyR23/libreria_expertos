@@ -1,0 +1,367 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
+if (!user || user.role_name !== 'CLIENTE') return Astro.redirect('/login');
+---
+
+<DashboardLayout title="Mis Libros" userRole={user.role_name}>
+
+  <!-- HEADER HERO -->
+  <div class="lb-hero">
+    <div class="lb-hero-inner">
+      <span class="lb-hero-icon">📚</span>
+      <div>
+        <div class="lb-hero-title">Mis Libros</div>
+        <div class="lb-hero-sub">Tu biblioteca digital personal — lee cuando quieras</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATES -->
+  <div id="loadingArea" class="lb-loading">
+    <div class="lb-spinner"></div>
+    <p>Cargando tu biblioteca…</p>
+  </div>
+
+  <div id="emptyArea" style="display:none" class="lb-empty">
+    <div class="lb-empty-icon">📖</div>
+    <h3>Aún no tienes libros digitales</h3>
+    <p>Compra libros con PDF disponible y aparecerán aquí para leerlos cuando quieras.</p>
+    <a href="/catalogo" class="btn btn-primary" style="margin-top:1rem">Explorar catálogo</a>
+  </div>
+
+  <!-- BOOKS GRID -->
+  <div id="booksGrid" style="display:none" class="lb-grid"></div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       PDF READER MODAL — full screen, protegido
+  ══════════════════════════════════════════════════════════ -->
+  <div id="readerModal" class="reader-overlay" style="display:none">
+
+    <!-- TOP BAR -->
+    <div class="reader-topbar">
+      <div class="reader-topbar-left">
+        <button id="readerClose" class="reader-close-btn" title="Cerrar">✕</button>
+        <div class="reader-book-meta">
+          <div id="readerTitle" class="reader-book-title">—</div>
+          <div id="readerAuthor" class="reader-book-author">—</div>
+        </div>
+      </div>
+      <div class="reader-topbar-center">
+        <button id="prevPage" class="reader-nav-btn" disabled>‹ Anterior</button>
+        <span class="reader-page-info">
+          Página <span id="currentPage">—</span> de <span id="totalPages">—</span>
+        </span>
+        <button id="nextPage" class="reader-nav-btn">Siguiente ›</button>
+      </div>
+      <div class="reader-topbar-right">
+        <button id="zoomOut" class="reader-tool-btn" title="Alejar">－</button>
+        <span id="zoomLevel" class="reader-zoom-lbl">100%</span>
+        <button id="zoomIn" class="reader-tool-btn" title="Acercar">＋</button>
+      </div>
+    </div>
+
+    <!-- CANVAS AREA — PDF renders here -->
+    <div class="reader-canvas-wrap" id="canvasWrap">
+      <div id="readerLoading" class="reader-inner-loading">
+        <div class="lb-spinner"></div>
+        <p>Cargando libro…</p>
+      </div>
+      <canvas id="pdfCanvas" style="display:none"></canvas>
+      <div id="readerError" style="display:none" class="reader-error">
+        <p>No se pudo cargar el libro. Intenta de nuevo.</p>
+        <button onclick="retryLoad()" class="btn btn-secondary btn-sm">Reintentar</button>
+      </div>
+    </div>
+
+    <!-- PROTECTION OVERLAY — blocks right-click / selection -->
+    <div class="reader-drm-overlay"></div>
+  </div>
+
+</DashboardLayout>
+
+<!-- PDF.js from CDN — no download, renders in canvas -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" is:inline></script>
+
+<script is:inline>
+const API = 'http://localhost:8000/api/v1';
+
+// ── DRM: disable right-click, print, keyboard shortcuts ──────────────────
+document.addEventListener('contextmenu', function(e) {
+  if (document.getElementById('readerModal').style.display !== 'none') e.preventDefault();
+});
+// Block right-click specifically on the canvas area
+document.getElementById('canvasWrap')?.addEventListener('contextmenu', function(e) {
+  e.preventDefault();
+});
+document.addEventListener('keydown', function(e) {
+  if (document.getElementById('readerModal').style.display !== 'none') {
+    // Block Ctrl+P (print), Ctrl+S (save), Ctrl+U (source), F12
+    if ((e.ctrlKey && ['p','s','u','a','c'].includes(e.key.toLowerCase())) || e.key === 'F12') {
+      e.preventDefault(); e.stopPropagation();
+    }
+  }
+});
+window.addEventListener('beforeprint', function(e) {
+  if (document.getElementById('readerModal').style.display !== 'none') e.preventDefault();
+});
+
+// ── STATE ────────────────────────────────────────────────────────────────
+let pdfDoc = null, currentPageNum = 1, zoom = 1.0, currentBookId = null;
+const canvas = document.getElementById('pdfCanvas');
+const ctx = canvas ? canvas.getContext('2d') : null;
+
+// Set PDF.js worker
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// ── LOAD MY BOOKS ────────────────────────────────────────────────────────
+async function loadMyBooks() {
+  const token = localStorage.getItem('token');
+  try {
+    const r = await fetch(API + '/sales/my-books', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!r.ok) throw new Error('Error al cargar');
+    const books = await r.json();
+    document.getElementById('loadingArea').style.display = 'none';
+    if (!books.length) { document.getElementById('emptyArea').style.display = 'flex'; return; }
+    renderBooks(books);
+  } catch(e) {
+    document.getElementById('loadingArea').style.display = 'none';
+    document.getElementById('emptyArea').style.display = 'flex';
+  }
+}
+
+function renderBooks(books) {
+  const grid = document.getElementById('booksGrid');
+  grid.innerHTML = books.map(function(b) {
+    const cover = b.imagen_url
+      ? `<img src="http://localhost:8000${b.imagen_url}" alt="${b.nombre}" class="lb-card-img" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
+      : '';
+    const hasPdf = !!b.has_pdf;
+    const overlayContent = hasPdf
+      ? `<div class="lb-read-icon">▶ Leer</div>`
+      : `<div class="lb-no-pdf-icon">📄 Sin PDF aún</div>`;
+    const cardClick = hasPdf
+      ? `onclick="openReader(${b.id}, '${b.nombre.replace(/'/g,"\\'")}', '${(b.autor||'').replace(/'/g,"\\'")}')"`
+      : '';
+    return `<article class="lb-card${hasPdf ? ' has-pdf' : ' no-pdf'}" ${cardClick}>
+      <div class="lb-card-cover">
+        ${cover}
+        <div class="lb-card-cover-ph" style="${b.imagen_url ? 'display:none' : ''}">📖</div>
+        ${hasPdf ? `<div class="lb-card-read-overlay"><div class="lb-read-icon">▶ Leer</div></div>` : `<div class="lb-card-read-overlay no-pdf-overlay"><div class="lb-no-pdf-icon">📄 Sin PDF aún</div></div>`}
+      </div>
+      <div class="lb-card-body">
+        <div class="lb-card-title">${b.nombre}</div>
+        <div class="lb-card-author">✍️ ${b.autor || 'Autor desconocido'}</div>
+        ${b.categoria ? `<span class="lb-card-cat">${b.categoria}</span>` : ''}
+        ${!hasPdf ? `<div class="lb-pdf-pending">📄 PDF pendiente de subir</div>` : `<div class="lb-pdf-ready">📖 Listo para leer</div>`}
+      </div>
+    </article>`;
+  }).join('');
+  grid.style.display = 'grid';
+}
+
+// ── OPEN READER ──────────────────────────────────────────────────────────
+async function openReader(bookId, title, author) {
+  currentBookId = bookId;
+  currentPageNum = 1;
+  zoom = 1.0;
+  document.getElementById('zoomLevel').textContent = '100%';
+  document.getElementById('readerTitle').textContent = title;
+  document.getElementById('readerAuthor').textContent = author;
+  document.getElementById('currentPage').textContent = '—';
+  document.getElementById('totalPages').textContent = '—';
+  document.getElementById('pdfCanvas').style.display = 'none';
+  document.getElementById('readerLoading').style.display = 'flex';
+  document.getElementById('readerError').style.display = 'none';
+  document.getElementById('readerModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  await loadPdf(bookId);
+}
+
+async function loadPdf(bookId) {
+  const token = localStorage.getItem('token');
+  try {
+    // Fetch PDF as ArrayBuffer to avoid the browser offering a download
+    const r = await fetch(API.replace('/api/v1','') + '/api/v1/books/pdf-full-auth/' + bookId, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!r.ok) throw new Error('No autorizado o PDF no disponible');
+    const arrayBuffer = await r.arrayBuffer();
+    // Load with PDF.js — renders to canvas, no download possible
+    pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    document.getElementById('totalPages').textContent = pdfDoc.numPages;
+    document.getElementById('readerLoading').style.display = 'none';
+    document.getElementById('pdfCanvas').style.display = 'block';
+    renderPage(currentPageNum);
+  } catch(e) {
+    document.getElementById('readerLoading').style.display = 'none';
+    document.getElementById('readerError').style.display = 'flex';
+    console.error('PDF load error:', e);
+  }
+}
+
+window.retryLoad = function() {
+  if (currentBookId) { loadPdf(currentBookId); }
+};
+
+async function renderPage(num) {
+  if (!pdfDoc) return;
+  const page = await pdfDoc.getPage(num);
+  const wrap = document.getElementById('canvasWrap');
+  // Fill 90% of the available width at current zoom
+  const baseScale = (wrap.clientWidth * 0.90) / page.getViewport({scale:1}).width;
+  const viewport = page.getViewport({ scale: zoom * baseScale });
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  document.getElementById('currentPage').textContent = num;
+  document.getElementById('prevPage').disabled = num <= 1;
+  document.getElementById('nextPage').disabled = num >= pdfDoc.numPages;
+}
+
+// ── CONTROLS ─────────────────────────────────────────────────────────────
+document.getElementById('prevPage')?.addEventListener('click', function() {
+  if (currentPageNum > 1) { currentPageNum--; renderPage(currentPageNum); }
+});
+document.getElementById('nextPage')?.addEventListener('click', function() {
+  if (pdfDoc && currentPageNum < pdfDoc.numPages) { currentPageNum++; renderPage(currentPageNum); }
+});
+document.getElementById('zoomIn')?.addEventListener('click', function() {
+  if (zoom < 3.0) { zoom = Math.round((zoom + 0.25) * 100) / 100; document.getElementById('zoomLevel').textContent = Math.round(zoom*100)+'%'; renderPage(currentPageNum); }
+});
+document.getElementById('zoomOut')?.addEventListener('click', function() {
+  if (zoom > 0.25) { zoom = Math.round((zoom - 0.25) * 100) / 100; document.getElementById('zoomLevel').textContent = Math.round(zoom*100)+'%'; renderPage(currentPageNum); }
+});
+document.getElementById('readerClose')?.addEventListener('click', closeReader);
+
+function closeReader() {
+  document.getElementById('readerModal').style.display = 'none';
+  document.body.style.overflow = '';
+  pdfDoc = null; currentBookId = null;
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', function(e) {
+  if (document.getElementById('readerModal').style.display === 'none') return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') document.getElementById('nextPage')?.click();
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   document.getElementById('prevPage')?.click();
+  if (e.key === 'Escape') closeReader();
+});
+
+loadMyBooks();
+</script>
+
+<style is:global>
+/* ── HERO ── */
+.lb-hero { background:linear-gradient(135deg,#0d1b2e,#1e3a6e); border-radius:var(--radius); padding:1.5rem 2rem; margin-bottom:1.5rem; color:white; display:flex; justify-content:space-between; align-items:center; }
+.lb-hero-inner { display:flex; gap:1rem; align-items:center; }
+.lb-hero-icon { font-size:2.5rem; }
+.lb-hero-title { font-family:var(--font-display); font-size:1.5rem; font-weight:700; margin-bottom:2px; }
+.lb-hero-sub { font-size:0.85rem; color:rgba(255,255,255,0.6); }
+
+/* ── STATES ── */
+@keyframes spin { to { transform:rotate(360deg); } }
+.lb-spinner { width:44px; height:44px; border:3px solid var(--gray-200); border-top-color:var(--blue-mid); border-radius:50%; animation:spin 0.8s linear infinite; }
+.lb-loading { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem; padding:4rem; background:white; border-radius:var(--radius); border:1px solid var(--gray-200); color:var(--gray-400); }
+.lb-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:5rem 2rem; text-align:center; background:white; border-radius:var(--radius); border:1px solid var(--gray-200); }
+.lb-empty-icon { font-size:4rem; margin-bottom:1rem; }
+.lb-empty h3 { font-family:var(--font-display); font-size:1.25rem; color:var(--navy); margin-bottom:0.5rem; }
+.lb-empty p { color:var(--gray-400); font-size:0.9rem; max-width:360px; }
+
+/* ── BOOKS GRID ── */
+.lb-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(185px,1fr)); gap:1.25rem; }
+.lb-card { background:white; border-radius:var(--radius); border:1px solid var(--gray-200); box-shadow:var(--shadow-sm); overflow:hidden; cursor:pointer; transition:transform 0.2s, box-shadow 0.2s; }
+.lb-card.has-pdf:hover { transform:translateY(-4px); box-shadow:0 12px 28px rgba(13,27,46,0.14); }
+.lb-card.has-pdf:hover .lb-card-read-overlay { opacity:1; }
+.lb-card.no-pdf { cursor:default; opacity:0.75; }
+.lb-card.no-pdf .lb-card-read-overlay { background:rgba(0,0,0,0.45); opacity:1; pointer-events:none; }
+.lb-no-pdf-icon { color:rgba(255,255,255,0.7); font-size:0.85rem; font-weight:600; background:rgba(0,0,0,0.3); padding:0.5rem 1rem; border-radius:999px; border:1.5px solid rgba(255,255,255,0.25); }
+.lb-pdf-pending { font-size:0.68rem; color:#d97706; font-weight:600; margin-top:4px; background:#fffbeb; padding:2px 7px; border-radius:999px; display:inline-block; }
+.lb-pdf-ready { font-size:0.68rem; color:#16a34a; font-weight:600; margin-top:4px; background:#f0fdf4; padding:2px 7px; border-radius:999px; display:inline-block; }
+.lb-card-cover { position:relative; height:220px; background:linear-gradient(135deg,#1e3a6e,#2563eb); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.lb-card-img { width:100%; height:100%; object-fit:cover; position:absolute; inset:0; }
+.lb-card-cover-ph { font-size:4rem; color:rgba(255,255,255,0.4); z-index:1; display:flex; align-items:center; justify-content:center; width:100%; height:100%; }
+.lb-card-read-overlay { position:absolute; inset:0; background:rgba(13,27,46,0.7); display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity 0.2s; z-index:2; }
+.lb-read-icon { color:white; font-size:1.1rem; font-weight:700; background:rgba(255,255,255,0.15); padding:0.6rem 1.2rem; border-radius:999px; border:2px solid rgba(255,255,255,0.4); }
+.lb-card-body { padding:0.875rem; }
+.lb-card-title { font-weight:700; font-size:0.875rem; color:var(--navy); line-height:1.3; margin-bottom:4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.lb-card-author { font-size:0.75rem; color:var(--gray-400); margin-bottom:0.4rem; }
+.lb-card-cat { font-size:0.65rem; font-weight:700; background:var(--blue-pale); color:var(--blue-mid); padding:2px 7px; border-radius:999px; }
+
+/* ══════════════════════════════════════════════════════════
+   PDF READER MODAL
+══════════════════════════════════════════════════════════ */
+.reader-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: #111827;
+  display: flex; flex-direction: column;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* TOP BAR */
+.reader-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 1.25rem;
+  height: 56px; min-height: 56px;
+  background: #0d1b2e;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  gap: 1rem;
+  flex-shrink: 0;
+}
+.reader-topbar-left { display:flex; align-items:center; gap:0.875rem; min-width:0; }
+.reader-close-btn { width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.08); border:none; color:white; font-size:1rem; cursor:pointer; flex-shrink:0; transition:background 0.15s; }
+.reader-close-btn:hover { background:rgba(239,68,68,0.4); }
+.reader-book-meta { min-width:0; }
+.reader-book-title { font-weight:700; font-size:0.9rem; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:240px; }
+.reader-book-author { font-size:0.72rem; color:rgba(255,255,255,0.45); }
+.reader-topbar-center { display:flex; align-items:center; gap:0.75rem; }
+.reader-nav-btn { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:white; padding:5px 14px; border-radius:6px; font-size:0.8rem; cursor:pointer; transition:background 0.15s; white-space:nowrap; }
+.reader-nav-btn:hover:not(:disabled) { background:rgba(255,255,255,0.2); }
+.reader-nav-btn:disabled { opacity:0.3; cursor:default; }
+.reader-page-info { font-size:0.8rem; color:rgba(255,255,255,0.6); white-space:nowrap; }
+.reader-topbar-right { display:flex; align-items:center; gap:0.5rem; }
+.reader-tool-btn { width:32px; height:32px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:white; border-radius:6px; cursor:pointer; font-size:1rem; transition:background 0.15s; }
+.reader-tool-btn:hover { background:rgba(255,255,255,0.2); }
+.reader-zoom-lbl { font-size:0.78rem; color:rgba(255,255,255,0.6); min-width:38px; text-align:center; }
+
+/* CANVAS AREA */
+.reader-canvas-wrap {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  position: relative;
+  min-height: 0; /* critical for flex scroll */
+}
+.reader-canvas-wrap canvas {
+  box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+  border-radius: 2px;
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.reader-inner-loading { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem; color:rgba(255,255,255,0.5); padding:4rem; }
+.reader-error { display:flex; flex-direction:column; align-items:center; gap:1rem; color:rgba(255,255,255,0.6); padding:4rem; text-align:center; }
+
+/* DRM OVERLAY — transparent layer on top of canvas, blocks right-click but allows scroll */
+.reader-drm-overlay {
+  position: fixed;
+  inset: 56px 0 0 0;
+  z-index: 10000;
+  pointer-events: none; /* allow scroll & clicks to pass through to canvas wrap */
+  background: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+</style>

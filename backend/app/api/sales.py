@@ -93,6 +93,53 @@ def get_my_purchases(
     return sale_service.get_sales_by_client(cliente_id)
 
 
+@router.get("/my-books")
+def get_my_books(
+    current_user=Depends(require_cliente),
+    db: Session = Depends(get_db),
+):
+    """
+    Devuelve la lista de libros ÚNICOS que el cliente ha comprado.
+    Muestra todos los libros comprados; has_pdf indica si tiene PDF para leer.
+    """
+    from app.models.sale import Sale, SaleItem
+    from app.models.book import Book
+    from app.core.constants import SaleStatus
+
+    cliente_id = current_user.client.id if current_user.client else None
+    if not cliente_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El usuario no tiene perfil de cliente"
+        )
+
+    # Todos los libros únicos comprados por el cliente (con o sin PDF)
+    libros = db.query(Book).join(
+        SaleItem, SaleItem.libro_id == Book.id
+    ).join(
+        Sale, Sale.id == SaleItem.venta_id
+    ).filter(
+        Sale.cliente_id == cliente_id,
+        Sale.status == SaleStatus.COMPLETADA,
+        Book.activo == True
+    ).distinct().all()
+
+    return [
+        {
+            "id": b.id,
+            "nombre": b.nombre,
+            "autor": b.autor,
+            "descripcion": b.descripcion,
+            "categoria": b.categoria.name.value if b.categoria else None,
+            "editorial": b.editorial,
+            "anio_publicacion": b.anio_publicacion,
+            "imagen_url": b.imagen_url,
+            "has_pdf": bool(b.pdf_url),
+        }
+        for b in libros
+    ]
+
+
 @router.get("/all", response_model=List[SaleResponse])
 def get_all_sales(
     skip: int = Query(0, ge=0),
@@ -136,6 +183,62 @@ def get_sale(
             )
     
     return sale
+
+
+@router.get("/{sale_id}/invoice")
+def get_invoice(
+    sale_id: int,
+    current_user=Depends(require_any_authenticated),
+    db: Session = Depends(get_db)
+):
+    """Obtiene la factura de una venta específica."""
+    from app.models.sale import Invoice
+    from app.schemas.sale import InvoiceResponse
+    
+    sale_service = SaleService(db)
+    sale = sale_service.get_sale_by_id(sale_id)
+    
+    if not sale:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    
+    # Cliente solo puede ver sus propias facturas
+    if current_user.is_cliente():
+        cliente_id = current_user.client.id if current_user.client else None
+        if sale.cliente_id != cliente_id:
+            raise HTTPException(status_code=403, detail="No tienes permiso para ver esta factura")
+    
+    if not sale.invoice:
+        raise HTTPException(status_code=404, detail="Esta venta no tiene factura generada")
+    
+    # Devolver datos enriquecidos para la factura
+    inv = sale.invoice
+    return {
+        "id": inv.id,
+        "venta_id": inv.venta_id,
+        "numero_factura": inv.numero_factura,
+        "serie": inv.serie,
+        "numero_correlativo": inv.numero_correlativo,
+        "rtn_emisor": inv.rtn_emisor,
+        "rtn_cliente": inv.rtn_cliente,
+        "nombre_cliente": inv.nombre_cliente or sale.cliente_nombre or "Consumidor Final",
+        "subtotal": float(inv.subtotal),
+        "impuesto": float(inv.impuesto),
+        "total": float(inv.total),
+        "estado": inv.estado,
+        "fecha_emision": inv.fecha_emision.isoformat(),
+        "items": [
+            {
+                "libro_nombre": item.libro_nombre or f"Libro #{item.libro_id}",
+                "cantidad": item.cantidad,
+                "precio_unitario": float(item.precio_unitario),
+                "subtotal": float(item.subtotal),
+            }
+            for item in sale.items
+        ],
+        "empleado_nombre": sale.empleado_nombre,
+        "tipo": sale.tipo.value if sale.tipo else "PRESENCIAL",
+        "notas": sale.notas,
+    }
 
 
 @router.post("/{sale_id}/cancel", response_model=SaleResponse)

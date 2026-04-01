@@ -101,4 +101,78 @@ def reset_monthly_counter(
     }
 
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Body
+
+
+@router.post("/restock/{book_id}")
+def restock_book(
+    book_id: int,
+    cantidad: int = Body(..., embed=True),
+    current_user=Depends(require_empleado),
+    db: Session = Depends(get_db)
+):
+    """Repone stock de un libro desde el sistema experto."""
+    from app.models.book import Book
+    book = db.query(Book).filter(Book.id == book_id, Book.activo == True).first()
+    if not book:
+        raise HTTPException(status_code=404, detail="Libro no encontrado")
+    if cantidad <= 0:
+        raise HTTPException(status_code=400, detail="La cantidad debe ser mayor a 0")
+    book.stock += cantidad
+    db.commit()
+    return {"message": f"Stock actualizado: {book.nombre} ahora tiene {book.stock} unidades", "nuevo_stock": book.stock}
+
+
+@router.post("/apply-discount/{book_id}")
+def apply_discount(
+    book_id: int,
+    porcentaje: float = Body(..., embed=True),
+    current_user=Depends(require_empleado),
+    db: Session = Depends(get_db)
+):
+    """Aplica un descuento al precio de un libro. Guarda el precio original para poder restaurarlo."""
+    from app.models.book import Book
+    from decimal import Decimal
+    book = db.query(Book).filter(Book.id == book_id, Book.activo == True).first()
+    if not book:
+        raise HTTPException(status_code=404, detail="Libro no encontrado")
+    if not (1 <= porcentaje <= 90):
+        raise HTTPException(status_code=400, detail="El porcentaje debe estar entre 1 y 90")
+    # Guardar precio original solo si no tiene ya un descuento activo
+    precio_orig_actual = getattr(book, 'precio_original', None)
+    if precio_orig_actual is None:
+        book.precio_original = book.precio
+    precio_base = float(getattr(book, 'precio_original', book.precio))
+    descuento = precio_base * (porcentaje / 100)
+    book.precio = Decimal(str(round(precio_base - descuento, 2)))
+    db.commit()
+    return {
+        "message": f"Descuento aplicado a '{book.nombre}'",
+        "precio_original": precio_base,
+        "precio_nuevo": float(book.precio),
+        "descuento_aplicado": f"{porcentaje}%"
+    }
+
+
+@router.post("/remove-discount/{book_id}")
+def remove_discount(
+    book_id: int,
+    current_user=Depends(require_empleado),
+    db: Session = Depends(get_db)
+):
+    """Restaura el precio original de un libro (quita el descuento)."""
+    from app.models.book import Book
+    book = db.query(Book).filter(Book.id == book_id, Book.activo == True).first()
+    if not book:
+        raise HTTPException(status_code=404, detail="Libro no encontrado")
+    precio_orig = getattr(book, 'precio_original', None)
+    if precio_orig is None:
+        raise HTTPException(status_code=400, detail="Este libro no tiene descuento activo")
+    precio_restaurado = float(precio_orig)
+    book.precio = precio_orig
+    book.precio_original = None
+    db.commit()
+    return {
+        "message": f"Precio restaurado para '{book.nombre}'",
+        "precio_restaurado": precio_restaurado
+    }

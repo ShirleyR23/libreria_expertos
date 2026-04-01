@@ -1,169 +1,102 @@
 ---
-// Dashboard de Empleado
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 
-// Verificar que sea empleado
 const userStr = Astro.cookies.get('user')?.value;
 let user = null;
-try {
-  user = userStr ? JSON.parse(userStr) : null;
-} catch (e) {}
-
-if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) {
-  return Astro.redirect('/login');
-}
-
-const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-
-// Obtener datos
-let inventoryAlerts = { reposicion: [], compra_urgente: [] };
-let recentSales = [];
-
-try {
-  const [alertsRes, salesRes] = await Promise.all([
-    fetch(`${API_URL}/expert/inventory-alerts`, {
-      headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
-    }),
-    fetch(`${API_URL}/sales/all?limit=5`, {
-      headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
-    })
-  ]);
-  
-  if (alertsRes.ok) inventoryAlerts = await alertsRes.json();
-  if (salesRes.ok) recentSales = await salesRes.json();
-} catch (e) {
-  console.error('Error:', e);
-}
+try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
+if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) return Astro.redirect('/login');
 ---
 
-<DashboardLayout title="Dashboard Empleado" userRole="EMPLEADO">
+<DashboardLayout title="Dashboard Empleado" userRole={user.role_name}>
   <div class="grid grid-3">
-    <div class="stat-card">
-      <div class="stat-value" style="color: #f59e0b;">{inventoryAlerts.resumen?.total_alertas_reposicion || 0}</div>
-      <div class="stat-label">Alertas de Stock</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value" style="color: #ef4444;">{inventoryAlerts.resumen?.total_compras_urgentes || 0}</div>
-      <div class="stat-label">Compras Urgentes</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value" style="color: #22c55e;">{recentSales.length}</div>
-      <div class="stat-label">Ventas Recientes</div>
-    </div>
+    <div class="stat-card"><div class="stat-value" id="statAlertas" style="color:#f59e0b"><span class="skeleton sk-val"></span></div><div class="stat-label">Alertas de Stock</div></div>
+    <div class="stat-card"><div class="stat-value" id="statUrgentes" style="color:#ef4444"><span class="skeleton sk-val"></span></div><div class="stat-label">Compras Urgentes</div></div>
+    <div class="stat-card"><div class="stat-value" id="statVentasRec" style="color:#22c55e"><span class="skeleton sk-val"></span></div><div class="stat-label">Ventas Recientes (hoy)</div></div>
   </div>
-  
+
   <div class="grid grid-2 mt-4">
     <div class="card">
       <div class="card-header">
         <h2 class="card-title">Accesos Rápidos</h2>
+        <button id="refreshBtn" class="btn btn-secondary btn-sm">🔄 Actualizar</button>
       </div>
       <div class="quick-links">
-        <a href="/inventario" class="quick-link">
-          <span class="icon">📚</span>
-          <span>Ver Inventario</span>
-        </a>
-        <a href="/ventas" class="quick-link">
-          <span class="icon">💰</span>
-          <span>Registrar Venta</span>
-        </a>
-        <a href="/catalogo" class="quick-link">
-          <span class="icon">🏪</span>
-          <span>Ver Catálogo</span>
-        </a>
+        <a href="/inventario" class="quick-link"><span class="icon">📚</span><span>Ver Inventario</span></a>
+        <a href="/ventas" class="quick-link"><span class="icon">💰</span><span>Registrar Venta</span></a>
+        <a href="/sistema-experto" class="quick-link"><span class="icon">🤖</span><span>Sistema Experto</span></a>
       </div>
     </div>
-    
+
     <div class="card">
-      <div class="card-header">
-        <h2 class="card-title">Ventas Recientes</h2>
+      <div class="card-header"><h2 class="card-title">Ventas Recientes</h2></div>
+      <div id="recentSalesWrap">
+        <div class="loading-row"><span class="skeleton" style="height:48px;border-radius:8px;display:block;margin-bottom:8px"></span><span class="skeleton" style="height:48px;border-radius:8px;display:block;margin-bottom:8px"></span><span class="skeleton" style="height:48px;border-radius:8px;display:block"></span></div>
       </div>
-      <div class="recent-sales">
-        {recentSales.length === 0 ? (
-          <p class="empty">No hay ventas recientes</p>
-        ) : (
-          recentSales.map(sale => {
-            // Convertir total a número de forma segura
-            const total = typeof sale.total === 'string' ? parseFloat(sale.total) : (sale.total || 0);
-            return (
-              <div class="sale-item">
-                <div class="sale-info">
-                  <span class="sale-id">Venta #{sale.id}</span>
-                  <span class={`badge badge-${(sale.status || 'pendiente').toLowerCase()}`}>{sale.status || 'PENDIENTE'}</span>
-                </div>
-                <span class="sale-total">L {total.toFixed(2)}</span>
-              </div>
-            );
-          })
-        )}
-      </div>
+      <p class="last-updated" id="lastUpdated"></p>
     </div>
   </div>
 </DashboardLayout>
 
+<script is:inline>
+  const API = 'http://localhost:8000/api/v1';
+  const token = localStorage.getItem('token');
+
+  async function loadDashboard() {
+    try {
+      const [alertsRes, salesRes] = await Promise.all([
+        fetch(`${API}/expert/inventory-alerts`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API}/sales/all?limit=5`, { headers: { 'Authorization': `Bearer ${token}` } })
+      ]);
+
+      if (alertsRes.ok) {
+        const alerts = await alertsRes.json();
+        document.getElementById('statAlertas').textContent = alerts.resumen?.total_alertas_reposicion ?? 0;
+        document.getElementById('statUrgentes').textContent = alerts.resumen?.total_compras_urgentes ?? 0;
+      }
+
+      if (salesRes.ok) {
+        const sales = await salesRes.json();
+        document.getElementById('statVentasRec').textContent = sales.length;
+
+        const wrap = document.getElementById('recentSalesWrap');
+        if (!sales.length) {
+          wrap.innerHTML = '<p class="empty">No hay ventas recientes</p>';
+        } else {
+          wrap.innerHTML = sales.map(s => {
+            const total = parseFloat(s.total || 0);
+            const statusClass = s.status === 'COMPLETADA' ? 'badge-success' : s.status === 'CANCELADA' ? 'badge-danger' : 'badge-warning';
+            return `<div class="sale-item">
+              <div class="sale-info">
+                <span class="sale-id">Venta #${s.id}</span>
+                <span class="badge ${statusClass}">${s.status || 'PENDIENTE'}</span>
+              </div>
+              <span class="sale-total">L ${total.toFixed(2)}</span>
+            </div>`;
+          }).join('');
+        }
+      }
+
+      document.getElementById('lastUpdated').textContent = 'Actualizado: ' + new Date().toLocaleTimeString('es-HN');
+    } catch(e) { console.error('Dashboard error:', e); }
+  }
+
+  document.getElementById('refreshBtn')?.addEventListener('click', loadDashboard);
+  loadDashboard();
+  setInterval(loadDashboard, 30000);
+</script>
+
 <style>
-  .quick-links {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-  
-  .quick-link {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem;
-    background: #f8fafc;
-    border-radius: 8px;
-    text-decoration: none;
-    color: #1e293b;
-    transition: all 0.2s;
-  }
-  
-  .quick-link:hover {
-    background: #e0e7ff;
-  }
-  
-  .quick-link .icon {
-    font-size: 1.5rem;
-  }
-  
-  .recent-sales {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-  
-  .sale-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem;
-    background: #f8fafc;
-    border-radius: 8px;
-  }
-  
-  .sale-info {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  
-  .sale-id {
-    font-weight: 500;
-  }
-  
-  .sale-total {
-    font-weight: 600;
-    color: #3b82f6;
-  }
-  
-  .empty {
-    color: #64748b;
-    text-align: center;
-    padding: 1rem;
-  }
-  
-  .mt-4 {
-    margin-top: 1.5rem;
-  }
+  .mt-4 { margin-top:1.5rem; }
+  .sk-val { display:inline-block; width:60px; height:32px; border-radius:6px; }
+  .quick-links { display:flex; flex-direction:column; gap:0.75rem; }
+  .quick-link { display:flex; align-items:center; gap:1rem; padding:1rem; background:var(--gray-50); border-radius:8px; text-decoration:none; color:var(--navy); border:1.5px solid var(--gray-200); transition:all 0.2s; font-weight:500; }
+  .quick-link:hover { background:var(--blue-ghost); border-color:var(--blue-mid); }
+  .quick-link .icon { font-size:1.5rem; }
+  .recent-sales { display:flex; flex-direction:column; gap:0.75rem; }
+  .sale-item { display:flex; justify-content:space-between; align-items:center; padding:0.75rem; background:var(--gray-50); border-radius:8px; }
+  .sale-info { display:flex; align-items:center; gap:0.5rem; }
+  .sale-id { font-weight:500; font-size:0.875rem; }
+  .sale-total { font-weight:700; color:var(--blue-mid); }
+  .empty { color:var(--gray-400); text-align:center; padding:1.5rem; }
+  .last-updated { font-size:0.72rem; color:var(--gray-400); text-align:right; margin-top:0.5rem; }
 </style>

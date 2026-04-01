@@ -24,7 +24,7 @@ class Client(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relaciones - Usamos backref para evitar dependencias circulares
-    user = relationship("User", backref="client", uselist=False)
+    user = relationship("User", backref=backref("client", uselist=False), uselist=False)
     
     def __repr__(self) -> str:
         return f"<Client(id={self.id}, user_id={self.user_id})>"

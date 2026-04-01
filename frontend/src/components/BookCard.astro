@@ -1,5 +1,4 @@
 ---
-// Componente de tarjeta de libro
 interface Props {
   id: number;
   nombre: string;
@@ -9,191 +8,78 @@ interface Props {
   categoria?: string;
   esBestseller?: boolean;
   showActions?: boolean;
+  imagenUrl?: string;
 }
 
-const { 
-  id, 
-  nombre, 
-  autor, 
-  precio, 
-  stock, 
-  categoria = '', 
-  esBestseller = false,
-  showActions = true 
-} = Astro.props;
+const { id, nombre, autor, precio, stock, categoria = '', esBestseller = false, showActions = true, imagenUrl } = Astro.props;
 
 const disponible = stock > 0;
-const precioFormateado = new Intl.NumberFormat('es-HN', {
-  style: 'currency',
-  currency: 'HNL'
-}).format(precio);
+const lowStock = stock > 0 && stock < 5;
+const precioFormateado = new Intl.NumberFormat('es-HN', { style: 'currency', currency: 'HNL' }).format(precio);
+const hasImg = !!imagenUrl;
 ---
 
-<div class="book-card" data-book-id={id}>
-  <div class="book-image">
-    <div class="book-placeholder">📖</div>
-    {esBestseller && <span class="bestseller-badge">⭐ Bestseller</span>}
-    {!disponible && <span class="out-of-stock">Agotado</span>}
+<article class={`book-card ${!disponible ? 'out-of-stock' : ''}`} data-book-id={id}>
+  <div class="book-cover">
+    {hasImg
+      ? <img src={`http://localhost:8000${imagenUrl}`} alt={nombre} class="cover-img" loading="lazy" />
+      : null}
+    <div class="cover-default" style={hasImg ? 'display:none' : ''}>
+      <div class="cover-default-inner">
+        <div class="cover-icon">📖</div>
+        <div class="cover-title-mini">{nombre.substring(0,30)}{nombre.length > 30 ? '…' : ''}</div>
+      </div>
+    </div>
+    {esBestseller && <div class="badge-bestseller">⭐ Bestseller</div>}
+    {!disponible && <div class="badge-out">Agotado</div>}
+    {lowStock && disponible && <div class="badge-low">¡Últimas!</div>}
+    <div class="cover-overlay"></div>
   </div>
-  
+
   <div class="book-info">
-    {categoria && <span class="book-category">{categoria}</span>}
-    <h3 class="book-title">{nombre}</h3>
-    <p class="book-author">por {autor}</p>
-    <p class="book-price">{precioFormateado}</p>
-    <p class={`book-stock ${stock < 5 ? 'low-stock' : ''}`}>
-      {disponible ? `${stock} disponibles` : 'Sin stock'}
-    </p>
-  </div>
-  
-  {showActions && (
-    <div class="book-actions">
-      {disponible ? (
-        <button class="btn btn-primary btn-buy" data-book-id={id} data-book-name={nombre} data-book-price={precio}>
-          🛒 Comprar
-        </button>
-      ) : (
-        <button class="btn btn-secondary" disabled>
-          Agotado
+    {categoria && <span class="book-cat">{categoria}</span>}
+    <h3 class="book-name">{nombre}</h3>
+    <p class="book-author">✍️ {autor}</p>
+    <div class="book-bottom">
+      <div>
+        <p class="book-price">{precioFormateado}</p>
+        <p class={`book-stock ${lowStock ? 'low' : !disponible ? 'out' : ''}`}>
+          {disponible ? `✔ ${stock} disponibles` : '✖ Sin stock'}
+        </p>
+      </div>
+      {showActions && disponible && (
+        <button class="btn-buy" data-book-id={id} data-book-name={nombre} data-book-price={precio} data-book-img={imagenUrl || ''}>
+          🛒
         </button>
       )}
     </div>
-  )}
-</div>
+  </div>
+</article>
 
 <style>
-  .book-card {
-    background: white;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    transition: transform 0.2s, box-shadow 0.2s;
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .book-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  }
-  
-  .book-image {
-    position: relative;
-    height: 180px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .book-placeholder {
-    font-size: 4rem;
-  }
-  
-  .bestseller-badge {
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    background: #f59e0b;
-    color: white;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-  
-  .out-of-stock {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.7);
-    color: white;
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-weight: 600;
-  }
-  
-  .book-info {
-    padding: 1rem;
-    flex: 1;
-  }
-  
-  .book-category {
-    display: inline-block;
-    background: #e0e7ff;
-    color: #4338ca;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    margin-bottom: 0.5rem;
-  }
-  
-  .book-title {
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-    line-height: 1.4;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  
-  .book-author {
-    font-size: 0.875rem;
-    color: #64748b;
-    margin-bottom: 0.5rem;
-  }
-  
-  .book-price {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #3b82f6;
-    margin-bottom: 0.25rem;
-  }
-  
-  .book-stock {
-    font-size: 0.875rem;
-    color: #22c55e;
-  }
-  
-  .book-stock.low-stock {
-    color: #f59e0b;
-  }
-  
-  .book-actions {
-    padding: 1rem;
-    border-top: 1px solid #e2e8f0;
-  }
-  
-  .btn {
-    width: 100%;
-    padding: 0.75rem;
-    border: none;
-    border-radius: 8px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  
-  .btn-primary {
-    background: #3b82f6;
-    color: white;
-  }
-  
-  .btn-primary:hover {
-    background: #2563eb;
-  }
-  
-  .btn-secondary {
-    background: #e2e8f0;
-    color: #64748b;
-  }
-  
-  .btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
+  .book-card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border: 1px solid #e2e8f0; transition: all 0.3s cubic-bezier(0.25,0.8,0.25,1); display: flex; flex-direction: column; }
+  .book-card:hover { transform: translateY(-6px); box-shadow: 0 12px 40px rgba(13,27,46,0.16); border-color: transparent; }
+  .book-card.out-of-stock { opacity: 0.7; }
+  .book-cover { position: relative; height: 280px; overflow: hidden; }
+  .cover-img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.4s ease; }
+  .book-card:hover .cover-img { transform: scale(1.04); }
+  .cover-default { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: linear-gradient(145deg, #1a3560, #0d1b2e); }
+  .cover-default-inner { text-align: center; padding: 1rem; }
+  .cover-icon { font-size: 3.5rem; margin-bottom: 0.75rem; }
+  .cover-title-mini { font-family: 'Playfair Display', Georgia, serif; color: rgba(255,255,255,0.85); font-size: 0.85rem; font-weight: 600; line-height: 1.4; }
+  .cover-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(13,27,46,0.5) 0%, transparent 50%); pointer-events: none; }
+  .badge-bestseller { position: absolute; top: 10px; left: 10px; background: linear-gradient(135deg,#f59e0b,#d97706); color: white; padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; box-shadow: 0 2px 8px rgba(245,158,11,0.4); }
+  .badge-out { position: absolute; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.95rem; }
+  .badge-low { position: absolute; top: 10px; right: 10px; background: linear-gradient(135deg,#ef4444,#dc2626); color: white; padding: 3px 10px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; }
+  .book-info { padding: 1rem; flex: 1; display: flex; flex-direction: column; gap: 0.35rem; }
+  .book-cat { display: inline-block; background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  .book-name { font-family: 'Playfair Display', Georgia, serif; font-size: 1rem; font-weight: 600; color: #0d1b2e; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .book-author { font-size: 0.8rem; color: #94a3b8; }
+  .book-bottom { display: flex; align-items: flex-end; justify-content: space-between; margin-top: auto; padding-top: 0.5rem; border-top: 1px solid #f1f5f9; }
+  .book-price { font-size: 1rem; font-weight: 700; color: #2563eb; }
+  .book-stock { font-size: 0.75rem; color: #16a34a; font-weight: 500; }
+  .book-stock.low { color: #d97706; }
+  .book-stock.out { color: #dc2626; }
+  .btn-buy { width: 38px; height: 38px; border-radius: 50%; background: #2563eb; color: white; border: none; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; box-shadow: 0 2px 8px rgba(37,99,235,0.35); }
+  .btn-buy:hover { background: #1a3560; transform: scale(1.1); }
 </style>

@@ -32,7 +32,7 @@ def create_employee(
     return auth_service.create_employee(employee_data, current_user.id)
 
 
-@router.get("/employees", response_model=List[UserResponse])
+@router.get("/employees")
 def get_all_employees(
     current_user=Depends(require_admin),
     db: Session = Depends(get_db)
@@ -47,18 +47,101 @@ def get_all_employees(
         User.role.has(name=UserRole.EMPLEADO)
     ).all()
     
-    return [
-        UserResponse(
-            id=e.id,
-            nombre=e.nombre,
-            email=e.email,
-            role_id=e.role_id,
-            role_name=e.role_name,
-            activo=e.activo,
-            created_at=e.created_at
-        )
-        for e in employees
-    ]
+    result = []
+    for e in employees:
+        emp_data = {
+            "id": e.id,
+            "nombre": e.nombre,
+            "email": e.email,
+            "role_id": e.role_id,
+            "role_name": e.role_name,
+            "activo": e.activo,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+            "turno": e.employee.turno if e.employee else None,
+            "salario": float(e.employee.salario) if e.employee and e.employee.salario else None,
+            "telefono": e.employee.telefono if e.employee else None,
+            "direccion": e.employee.direccion if e.employee else None,
+            "employee_id": e.employee.id if e.employee else None,
+        }
+        result.append(emp_data)
+    return result
+
+
+
+@router.get("/employees/{employee_id}")
+def get_employee(
+    employee_id: int,
+    current_user=Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Obtiene un empleado por ID."""
+    from app.models.user import User
+    e = db.query(User).filter(User.id == employee_id).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    return {
+        "id": e.id,
+        "nombre": e.nombre,
+        "email": e.email,
+        "role_id": e.role_id,
+        "role_name": e.role_name,
+        "activo": e.activo,
+        "created_at": e.created_at.isoformat() if e.created_at else None,
+        "turno": e.employee.turno if e.employee else None,
+        "salario": float(e.employee.salario) if e.employee and e.employee.salario else None,
+        "telefono": e.employee.telefono if e.employee else None,
+        "direccion": e.employee.direccion if e.employee else None,
+        "employee_id": e.employee.id if e.employee else None,
+    }
+
+
+@router.put("/employees/{employee_id}")
+def update_employee(
+    employee_id: int,
+    data: dict,
+    current_user=Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Actualiza datos de un empleado."""
+    from app.models.user import User
+    from app.models.employee import Employee
+    
+    user = db.query(User).filter(User.id == employee_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    
+    # Update user fields
+    if "nombre" in data and data["nombre"]:
+        user.nombre = data["nombre"]
+    if "email" in data and data["email"]:
+        user.email = data["email"]
+    if "activo" in data and data["activo"] is not None:
+        user.activo = data["activo"]
+    
+    # Update employee fields
+    if user.employee:
+        if "turno" in data and data["turno"]:
+            user.employee.turno = data["turno"]
+        if "salario" in data and data["salario"] is not None:
+            user.employee.salario = data["salario"]
+        if "telefono" in data:
+            user.employee.telefono = data["telefono"]
+        if "direccion" in data:
+            user.employee.direccion = data["direccion"]
+    
+    db.commit()
+    db.refresh(user)
+    
+    return {
+        "id": user.id,
+        "nombre": user.nombre,
+        "email": user.email,
+        "activo": user.activo,
+        "turno": user.employee.turno if user.employee else None,
+        "salario": float(user.employee.salario) if user.employee and user.employee.salario else None,
+        "telefono": user.employee.telefono if user.employee else None,
+        "direccion": user.employee.direccion if user.employee else None,
+    }
 
 
 @router.get("/dashboard-stats")

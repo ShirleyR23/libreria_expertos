@@ -47,20 +47,77 @@ def get_db() -> Session:
 
 
 def init_db() -> None:
-    """Inicializa todas las tablas en la base de datos."""
-    # Importar TODOS los modelos primero para que SQLAlchemy los registre
+    """Inicializa todas las tablas y ejecuta migraciones necesarias."""
     from app.models.user import User, Role
     from app.models.employee import Employee
     from app.models.client import Client
     from app.models.book import Book, BookCategory
     from app.models.sale import Sale, SaleItem, Invoice
     from app.models.purchase import Purchase, PurchaseItem
-    
-    # Crear todas las tablas
+
+    # Crear tablas nuevas (no modifica las existentes)
     Base.metadata.create_all(bind=engine)
-    
+
+    # Migración manual para columnas agregadas después de la creación inicial
+    _run_migrations()
+
     # Insertar datos iniciales
     seed_initial_data()
+
+
+def _run_migrations() -> None:
+    """
+    Aplica migraciones de columnas que se agregaron al modelo
+    pero que pueden no existir en bases de datos ya creadas.
+    Funciona tanto en SQLite como en PostgreSQL.
+    """
+    with engine.connect() as conn:
+        # Verificar y agregar imagen_url a la tabla libros
+        try:
+            if is_sqlite:
+                from sqlalchemy import text
+                result = conn.execute(text("PRAGMA table_info(libros)"))
+                columns = [row[1] for row in result.fetchall()]
+                if "imagen_url" not in columns:
+                    conn.execute(text("ALTER TABLE libros ADD COLUMN imagen_url VARCHAR(500)"))
+                    conn.commit()
+                    print("✅ Migración: columna imagen_url agregada a libros")
+            else:
+                # PostgreSQL
+                from sqlalchemy import text
+                result = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='libros' AND column_name='imagen_url'"
+                ))
+                if not result.fetchone():
+                    conn.execute(text("ALTER TABLE libros ADD COLUMN imagen_url VARCHAR(500)"))
+                    conn.commit()
+                    print("✅ Migración: columna imagen_url agregada a libros")
+        except Exception as e:
+            print(f"⚠️ Migración imagen_url: {e}")
+
+        # Verificar y agregar precio_original a la tabla libros
+        try:
+            if is_sqlite:
+                from sqlalchemy import text
+                result = conn.execute(text("PRAGMA table_info(libros)"))
+                columns = [row[1] for row in result.fetchall()]
+                if "precio_original" not in columns:
+                    conn.execute(text("ALTER TABLE libros ADD COLUMN precio_original NUMERIC(10, 2)"))
+                    conn.commit()
+                    print("✅ Migración: columna precio_original agregada a libros")
+            else:
+                from sqlalchemy import text
+                result = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='libros' AND column_name='precio_original'"
+                ))
+                if not result.fetchone():
+                    conn.execute(text("ALTER TABLE libros ADD COLUMN precio_original NUMERIC(10, 2)"))
+                    conn.commit()
+                    print("✅ Migración: columna precio_original agregada a libros")
+        except Exception as e:
+            print(f"⚠️ Migración precio_original: {e}")
 
 
 def seed_initial_data() -> None:

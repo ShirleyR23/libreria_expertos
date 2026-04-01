@@ -78,6 +78,7 @@ class BookService:
             precio=book_data.precio,
             stock=book_data.stock,
             stock_minimo=book_data.stock_minimo,
+            imagen_url=getattr(book_data, 'imagen_url', None),
             activo=True
         )
         
@@ -86,7 +87,6 @@ class BookService:
         self.db.refresh(new_book)
         
         return new_book
-    
     
     def create_book_from_dict(self, book_dict: dict, db: Session) -> Book:
         """Crea un libro desde un diccionario (para uso interno con compra automática)."""
@@ -99,13 +99,10 @@ class BookService:
             )
         
         new_book = Book(**book_dict)
-        
         db.add(new_book)
         db.commit()
         db.refresh(new_book)
-        
         return new_book
-
 
     def update_book(self, book_id: int, book_data: BookUpdate) -> Book:
         """Actualiza un libro existente."""
@@ -175,8 +172,30 @@ class BookService:
         """Obtiene todas las categorías de libros."""
         return self.db.query(BookCategory).all()
     
+
+    def recalculate_bestseller(self, top_n: int = 5, min_ventas: int = 1) -> None:
+        """
+        Marca como bestseller los TOP N libros con mayor movimiento (total_ventas).
+        - top_n: cuántos libros pueden ser bestseller simultáneamente (default 5)
+        - min_ventas: mínimo de unidades vendidas para calificar (default 1)
+        """
+        all_books = self.db.query(Book).filter(Book.activo == True).all()
+
+        top_books = self.db.query(Book).filter(
+            Book.activo == True,
+            Book.total_ventas >= min_ventas
+        ).order_by(Book.total_ventas.desc()).limit(top_n).all()
+
+        top_ids = {b.id for b in top_books}
+
+        for book in all_books:
+            book.es_bestseller = book.id in top_ids
+
+        self.db.commit()
+
     def get_bestsellers(self, limit: int = 10) -> List[Book]:
-        """Obtiene los libros más vendidos."""
+        """Obtiene los libros más vendidos ordenados por volumen de ventas."""
         return self.db.query(Book).filter(
-            Book.activo == True
+            Book.activo == True,
+            Book.total_ventas > 0
         ).order_by(Book.total_ventas.desc()).limit(limit).all()

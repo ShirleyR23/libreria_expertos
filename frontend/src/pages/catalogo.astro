@@ -1,273 +1,873 @@
 ---
-// Página de catálogo público
 import PublicLayout from '../layouts/PublicLayout.astro';
-import BookCard from '../components/BookCard.astro';
 
 const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-
-// Obtener libros del backend
-let books = [];
-let categories = [];
-let error = null;
-
-try {
-  const [booksRes, categoriesRes] = await Promise.all([
-    fetch(`${API_URL}/books/catalog?limit=50`),
-    fetch(`${API_URL}/books/categories`)
-  ]);
-  
-  if (booksRes.ok) {
-    books = await booksRes.json();
-  }
-  if (categoriesRes.ok) {
-    categories = await categoriesRes.json();
-  }
-} catch (e) {
-  error = 'Error al cargar el catálogo';
-}
-
-// Verificar si hay usuario autenticado
 const token = Astro.cookies.get('token')?.value;
 const userStr = Astro.cookies.get('user')?.value;
 let user = null;
-try {
-  user = userStr ? JSON.parse(userStr) : null;
-} catch (e) {}
+try { user = userStr ? JSON.parse(decodeURIComponent(userStr)) : null; } catch (e) {}
+const isCliente = user?.role_name === 'CLIENTE';
+const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.role_name === 'EMPLEADO' ? '/dashboard-empleado' : '/mis-compras';
 ---
 
 <PublicLayout title="Catálogo de Libros">
-  <nav class="catalog-nav">
-    <div class="nav-brand">
-      <span class="logo">📚</span>
-      <span>Librería</span>
-    </div>
-    <div class="nav-links">
-      {user ? (
-        <>
-          <span class="user-name">Hola, {user.nombre}</span>
-          <a href={user.role_name === 'ADMIN' ? '/dashboard-admin' : user.role_name === 'EMPLEADO' ? '/dashboard-empleado' : '/mis-compras'} class="btn btn-sm btn-primary">
-            Mi Cuenta
-          </a>
-          <button id="logoutBtn" class="btn btn-sm btn-outline">Cerrar Sesión</button>
-        </>
-      ) : (
-        <>
-          <a href="/login" class="btn btn-sm btn-outline">Iniciar Sesión</a>
-          <a href="/register" class="btn btn-sm btn-primary">Registrarse</a>
-        </>
-      )}
+
+  <!-- NAV -->
+  <nav class="top-nav">
+    <div class="nav-inner">
+      <a href="/catalogo" class="brand">
+        <div class="brand-icon">📚</div>
+        <span class="brand-name">Librería</span>
+      </a>
+      <div class="nav-actions">
+        {user ? (
+          <>
+            <span class="nav-greeting">Hola, <strong>{user.nombre}</strong></span>
+            <a href={dashboardUrl} class="btn btn-sm btn-outline-nav">Mi cuenta</a>
+            <button id="logoutBtn" class="btn btn-sm btn-ghost-nav">Salir</button>
+          </>
+        ) : (
+          <>
+            <a href="/login" class="btn btn-sm btn-ghost-nav">Iniciar sesión</a>
+            <a href="/register" class="btn btn-sm btn-primary">Registrarse</a>
+          </>
+        )}
+      </div>
     </div>
   </nav>
-  
-  <main class="catalog-main">
-    <div class="catalog-header">
-      <h1>📚 Catálogo de Libros</h1>
-      <p>Descubre nuestra colección de libros</p>
-    </div>
-    
-    <div class="filters">
-      <div class="search-box">
-        <input 
-          type="text" 
-          id="searchInput" 
-          class="form-input" 
-          placeholder="Buscar por título, autor o ISBN..."
-        />
-        <button id="searchBtn" class="btn btn-primary">🔍 Buscar</button>
-      </div>
-      
-      <div class="category-filter">
-        <select id="categorySelect" class="form-input">
+
+  <!-- HERO -->
+  <header class="hero-section">
+    <div class="hero-content">
+      <p class="hero-eyebrow">Bienvenido a nuestra colección</p>
+      <h1 class="hero-title">Catálogo de <span class="hero-accent">Libros</span></h1>
+      <p class="hero-sub">Explora nuestra selección de títulos cuidadosamente organizados para ti</p>
+      <div class="hero-search">
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="searchInput" class="search-input" placeholder="Buscar por título, autor o ISBN…">
+          <button id="clearSearch" class="search-clear" style="display:none">✕</button>
+        </div>
+        <select id="categorySelect" class="category-select">
           <option value="">Todas las categorías</option>
-          {categories.map(cat => (
-            <option value={cat.id}>{cat.name}</option>
-          ))}
+          <option value="__bestsellers__">⭐ Bestsellers</option>
         </select>
       </div>
     </div>
-    
-    {error && (
-      <div class="alert alert-error">{error}</div>
-    )}
-    
-    <div class="books-grid" id="booksGrid">
-      {books.map(book => (
-        <BookCard
-          id={book.id}
-          nombre={book.nombre}
-          autor={book.autor}
-          precio={book.precio}
-          stock={book.stock}
-          categoria={book.categoria?.name}
-          esBestseller={book.es_bestseller}
-          showActions={!!user && user.role_name === 'CLIENTE'}
-        />
+    <div class="hero-shapes">
+      <div class="shape shape-1"></div>
+      <div class="shape shape-2"></div>
+      <div class="shape shape-3"></div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="main-wrap">
+
+    <!-- STATS BAR -->
+    <div class="stats-bar">
+      <div class="stats-inner">
+        <div class="stat-item">
+          <span class="stat-icon">📖</span>
+          <span id="totalCount" class="stat-num">—</span>
+          <span class="stat-lbl">libros disponibles</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-icon">⭐</span>
+          <span id="bestsellerCount" class="stat-num">—</span>
+          <span class="stat-lbl">bestsellers</span>
+        </div>
+        <div class="stat-item" id="searchResultStat" style="display:none">
+          <div class="stat-divider"></div>
+          <span class="stat-icon">🔎</span>
+          <span id="searchResultCount" class="stat-num">—</span>
+          <span class="stat-lbl">resultados</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- FILTER PILLS -->
+    <div id="filterPills" class="filter-pills" style="display:none"></div>
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+      <div class="sort-group">
+        <label class="sort-label">Ordenar:</label>
+        <select id="sortSelect" class="sort-select">
+          <option value="default">Relevancia</option>
+          <option value="price-asc">Precio: menor a mayor</option>
+          <option value="price-desc">Precio: mayor a menor</option>
+          <option value="name-asc">Nombre A-Z</option>
+          <option value="bestseller">Más vendidos primero</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- SKELETON (cargando) -->
+    <div id="skeletonGrid" class="books-grid">
+      {Array.from({length: 12}).map(() => (
+        <div class="book-skeleton">
+          <div class="skeleton sk-img"></div>
+          <div class="sk-body">
+            <div class="skeleton sk-badge"></div>
+            <div class="skeleton sk-title"></div>
+            <div class="skeleton sk-title sk-short"></div>
+            <div class="skeleton sk-author"></div>
+            <div class="skeleton sk-price"></div>
+          </div>
+        </div>
       ))}
     </div>
-    
-    {books.length === 0 && !error && (
-      <div class="empty-state">
-        <p>No hay libros disponibles en este momento.</p>
-      </div>
-    )}
+
+    <!-- BOOKS GRID -->
+    <div id="booksGrid" class="books-grid" style="display:none"></div>
+
+    <!-- EMPTY STATE -->
+    <div id="emptyState" class="empty-state" style="display:none">
+      <div class="empty-illustration">📭</div>
+      <h3 class="empty-title">No se encontraron libros</h3>
+      <p class="empty-desc">Intenta con otros términos o elimina los filtros activos.</p>
+      <button onclick="clearAllFilters()" class="btn btn-primary">Limpiar filtros</button>
+    </div>
+
+    <!-- ERROR STATE -->
+    <div id="errorState" class="error-state" style="display:none">
+      <div class="empty-illustration">⚠️</div>
+      <h3 class="empty-title">Error al cargar el catálogo</h3>
+      <p class="empty-desc">No se pudo conectar con el servidor. Verifica que el backend esté activo.</p>
+      <button onclick="loadBooks()" class="btn btn-primary">Reintentar</button>
+    </div>
   </main>
+
+  <!-- PDF PREVIEW MODAL -->
+  <div id="pdfPreviewModal" class="pdf-prev-overlay" style="display:none">
+    <div class="pdf-prev-box">
+      <div class="pdf-prev-topbar">
+        <div class="pdf-prev-meta">
+          <div id="prevBookTitle" class="pdf-prev-title">—</div>
+          <div id="prevBookAuthor" class="pdf-prev-author">—</div>
+        </div>
+        <div class="pdf-prev-controls">
+          <button id="prevPdfPrev" class="pdf-prev-nav" disabled>‹</button>
+          <span class="pdf-prev-page"><span id="prevCurrentPage">1</span> / <span id="prevTotalPages">—</span></span>
+          <button id="nextPdfPrev" class="pdf-prev-nav">›</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <span class="pdf-prev-lock">🔒 Vista previa</span>
+          <button id="closePdfPreview" class="pdf-prev-close">✕</button>
+        </div>
+      </div>
+      <div class="pdf-prev-canvas-wrap" id="prevCanvasWrap">
+        <div id="prevLoading" class="pdf-prev-loading">
+          <div class="pdf-prev-spinner"></div>
+          <p>Cargando vista previa…</p>
+        </div>
+        <canvas id="prevCanvas" style="display:none"></canvas>
+        <div id="prevBlurGate" class="pdf-prev-blur-gate" style="display:none">
+          <div class="pdf-prev-blur-content">
+            <div class="pdf-prev-lock-icon">🔒</div>
+            <h3>Contenido bloqueado</h3>
+            <p>Esta es una vista previa. Compra el libro para leer el contenido completo.</p>
+            <button class="btn btn-primary" onclick="document.getElementById('pdfPreviewModal').style.display='none'">Ver en catálogo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pdf-prev-drm"></div>
+  </div>
+
+  <!-- BUY MODAL -->
+  <div id="buyModal" class="buy-modal-overlay" style="display:none">
+    <div class="buy-modal-box">
+      <div class="buy-modal-header">
+        <h2 class="buy-modal-title">Confirmar compra</h2>
+        <button id="closeBuyModal" class="buy-modal-close">✕</button>
+      </div>
+      <div class="buy-modal-body">
+        <div id="buyBookInfo"></div>
+
+        <!-- Compra digital: siempre 1 copia -->
+        <div class="buy-digital-notice">
+          <span class="buy-digital-icon">📱</span>
+          <div>
+            <div class="buy-digital-title">Copia digital — 1 unidad</div>
+            <div class="buy-digital-desc">Las compras online son copias digitales. Podrás leer el libro desde "Mis Libros" con tu cuenta.</div>
+          </div>
+        </div>
+
+        <div class="buy-section-title">Método de pago</div>
+        <div class="pay-method-grid">
+          <label class="pay-method-opt">
+            <input type="radio" name="payMethod" value="efectivo" checked>
+            <span class="pay-method-card">💵 Efectivo</span>
+          </label>
+          <label class="pay-method-opt">
+            <input type="radio" name="payMethod" value="tarjeta">
+            <span class="pay-method-card">💳 Tarjeta</span>
+          </label>
+          <label class="pay-method-opt">
+            <input type="radio" name="payMethod" value="transferencia">
+            <span class="pay-method-card">🏦 Transferencia</span>
+          </label>
+        </div>
+
+        <div id="cardFields" style="display:none" class="card-fields-wrap">
+          <div class="form-group" style="margin-bottom:0.5rem">
+            <label class="form-label" style="font-size:0.78rem">Últimos 4 dígitos de la tarjeta</label>
+            <input type="text" id="cardLast4" class="form-input" maxlength="4" placeholder="1234" pattern="[0-9]{4}">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top:0.75rem;margin-bottom:0">
+          <label class="form-label" style="font-size:0.78rem">RTN del cliente <span style="color:var(--gray-400);font-weight:400">(opcional — para factura fiscal)</span></label>
+          <input type="text" id="buyRtn" class="form-input" placeholder="0000-0000-000000" maxlength="20">
+        </div>
+
+        <div class="buy-total-row" style="margin-top:0.75rem">
+          <span>Total a pagar:</span>
+          <span id="buyTotal" class="buy-total-amount">L 0.00</span>
+        </div>
+      </div>
+      <div class="buy-modal-footer">
+        <button id="cancelBuyBtn" class="btn btn-secondary">Cancelar</button>
+        <button id="confirmBuyBtn" class="btn btn-primary">🛒 Confirmar compra</button>
+      </div>
+    </div>
+  </div>
+
 </PublicLayout>
 
-<script>
-  const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-  
-  // Logout
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" is:inline></script>
+
+<script is:inline define:vars={{ API_URL, isCliente }}>
+  // PDF.js worker
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  const BACKEND = API_URL || 'http://localhost:8000/api/v1';
+  const BACKEND_BASE = 'http://localhost:8000';
+  let allBooks = [];
+  let categories = [];
+  let showOnlyBestsellers = false;
+  let currentSearch = '';
+  let currentCategory = '';
+  let currentSort = 'default';
+  let buyBook = null;
+
+  // ============================================================
+  // CATEGORY CONFIG — colores e iconos
+  // ============================================================
+  const CAT_CONFIG = {
+    'FICCION':     { color: '#7c3aed', bg: '#f5f3ff', light: '#c4b5fd', icon: '🌙', label: 'Ficción' },
+    'NO_FICCION':  { color: '#0891b2', bg: '#ecfeff', light: '#a5f3fc', icon: '📰', label: 'No Ficción' },
+    'CIENCIA':     { color: '#16a34a', bg: '#f0fdf4', light: '#86efac', icon: '🔬', label: 'Ciencia' },
+    'TECNOLOGIA':  { color: '#2563eb', bg: '#eff6ff', light: '#93c5fd', icon: '💻', label: 'Tecnología' },
+    'HISTORIA':    { color: '#b45309', bg: '#fffbeb', light: '#fcd34d', icon: '🏛️', label: 'Historia' },
+    'ARTE':        { color: '#db2777', bg: '#fdf2f8', light: '#f9a8d4', icon: '🎨', label: 'Arte' },
+    'LITERATURA':  { color: '#ea580c', bg: '#fff7ed', light: '#fdba74', icon: '✒️', label: 'Literatura' },
+    'INFANTIL':    { color: '#e11d48', bg: '#fff1f2', light: '#fda4af', icon: '🦄', label: 'Infantil' },
+    'ACADEMICO':   { color: '#4338ca', bg: '#eef2ff', light: '#a5b4fc', icon: '🎓', label: 'Académico' },
+    'FILOSOFIA':   { color: '#334155', bg: '#f8fafc', light: '#94a3b8', icon: '🧠', label: 'Filosofía' },
+  };
+
+  function getCatKey(name) {
+    return (name || '').toUpperCase()
+      .replace(/Ó/g,'O').replace(/Í/g,'I').replace(/É/g,'E').replace(/Á/g,'A').replace(/Ú/g,'U')
+      .replace(/\s+/g,'_').replace(/-/g,'_');
+  }
+  function getCfg(name) {
+    return CAT_CONFIG[getCatKey(name)] || { color:'#1d4ed8', bg:'#eff6ff', light:'#bfdbfe', icon:'📖', label: name || '' };
+  }
+
+  // ============================================================
+  // INIT
+  // ============================================================
+  async function init() {
+    await Promise.all([loadCategories(), loadBooks()]);
+    setupSearch();
+  }
+
+  async function loadCategories() {
+    try {
+      const r = await fetch(`${BACKEND}/books/categories`);
+      if (r.ok) {
+        categories = await r.json();
+        const sel = document.getElementById('categorySelect');
+        categories.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          const cfg = getCfg(c.name);
+          opt.textContent = `${cfg.icon} ${c.name}`;
+          sel.appendChild(opt);
+        });
+      }
+    } catch(e) {}
+  }
+
+  async function loadBooks(search, categoryId) {
+    search = search ?? currentSearch;
+    categoryId = categoryId ?? currentCategory;
+    showSkeleton();
+    try {
+      const params = new URLSearchParams({ limit: 200 });
+      if (search) params.append('search', search);
+      if (categoryId) params.append('categoria_id', categoryId);
+      const r = await fetch(`${BACKEND}/books/catalog?${params}`);
+      if (!r.ok) throw new Error();
+      allBooks = await r.json();
+      updateStats();
+      renderBooks();
+    } catch(e) {
+      showError();
+    }
+  }
+
+  function setupSearch() {
+    const input = document.getElementById('searchInput');
+    const clearBtn = document.getElementById('clearSearch');
+    const catSel = document.getElementById('categorySelect');
+    const sortSel = document.getElementById('sortSelect');
+    let timer;
+    input.addEventListener('input', () => {
+      clearBtn.style.display = input.value ? 'flex' : 'none';
+      clearTimeout(timer);
+      timer = setTimeout(() => { currentSearch = input.value.trim(); loadBooks(currentSearch, currentCategory); updatePills(); }, 380);
+    });
+    clearBtn.addEventListener('click', () => {
+      input.value = ''; clearBtn.style.display = 'none';
+      currentSearch = ''; loadBooks('', currentCategory); updatePills();
+    });
+    catSel.addEventListener('change', () => {
+      const val = catSel.value;
+      if (val === '__bestsellers__') {
+        showOnlyBestsellers = true;
+        currentCategory = '';
+      } else {
+        showOnlyBestsellers = false;
+        currentCategory = val;
+      }
+      loadBooks(currentSearch, currentCategory);
+      updatePills();
+    });
+    sortSel.addEventListener('change', () => { currentSort = sortSel.value; renderBooks(); });
+  }
+
+  function getSorted(books) {
+    const b = [...books];
+    if (currentSort === 'price-asc') return b.sort((a,z) => a.precio - z.precio);
+    if (currentSort === 'price-desc') return b.sort((a,z) => z.precio - a.precio);
+    if (currentSort === 'name-asc') return b.sort((a,z) => a.nombre.localeCompare(z.nombre));
+    if (currentSort === 'bestseller') return b.sort((a,z) => (z.es_bestseller?1:0) - (a.es_bestseller?1:0));
+    return b;
+  }
+
+  function renderBooks() {
+    const grid = document.getElementById('booksGrid');
+    const empty = document.getElementById('emptyState');
+    document.getElementById('skeletonGrid').style.display = 'none';
+    const filtered = showOnlyBestsellers ? allBooks.filter(b => b.es_bestseller) : allBooks;
+    const books = getSorted(filtered);
+    if (books.length === 0) { grid.style.display = 'none'; empty.style.display = 'flex'; return; }
+    empty.style.display = 'none';
+    grid.style.display = 'grid';
+    grid.innerHTML = books.map(b => bookCardHTML(b)).join('');
+    const srStat = document.getElementById('searchResultStat');
+    if (currentSearch || currentCategory) {
+      srStat.style.display = 'flex';
+      document.getElementById('searchResultCount').textContent = books.length;
+    } else { srStat.style.display = 'none'; }
+    if (isCliente) {
+      grid.querySelectorAll('.btn-buy').forEach(btn => {
+        btn.addEventListener('click', () => openBuyModal({
+          id: +btn.dataset.id, nombre: btn.dataset.nombre,
+          precio: +btn.dataset.precio, stock: +btn.dataset.stock, imagen_url: btn.dataset.img || ''
+        }));
+      });
+    }
+  }
+
+  // ============================================================
+  // BOOK CARD HTML — portada colorida por categoría
+  // ============================================================
+  function bookCardHTML(book) {
+    const precio = parseFloat(book.precio);
+    const catName = book.categoria?.name || '';
+    const cfg = getCfg(catName);
+    const outOfStock = book.stock === 0;
+    const lowStock = book.stock > 0 && book.stock < 5;
+    const hasImg = !!book.imagen_url;
+    const imgUrl = hasImg ? `${BACKEND_BASE}${book.imagen_url}` : '';
+
+    // Cover: image OR colorful placeholder
+    const shortTitle = book.nombre.length > 30 ? book.nombre.substring(0, 30) + '…' : book.nombre;
+    const shortAuthor = (book.autor || '').length > 26 ? (book.autor || '').substring(0, 26) + '…' : (book.autor || '');
+    const coverContent = hasImg
+      ? `<img src="${imgUrl}" alt="${book.nombre}" class="cover-img" loading="lazy" width="230" height="200"
+            onerror="this.style.display='none';this.nextElementSibling.style.removeProperty('display')">`
+      : '';
+    const placeholderDisplay = hasImg ? 'display:none;' : '';
+
+    // Tags by category
+    const tagBadge = catName
+      ? `<span class="book-cat-tag" style="background:${cfg.bg};color:${cfg.color}">${cfg.icon} ${catName}</span>`
+      : '';
+
+    // Stock label
+    const stockLabel = outOfStock
+      ? `<span class="book-stock out">✖ Sin stock</span>`
+      : lowStock
+        ? `<span class="book-stock low">⚡ Solo ${book.stock} disponibles</span>`
+        : `<span class="book-stock ok">✔ ${book.stock} disponibles</span>`;
+
+    // Buy button
+    const buyBtn = isCliente && !outOfStock
+      ? `<button class="btn-buy" data-id="${book.id}" data-nombre="${book.nombre}" data-precio="${precio}" data-stock="${book.stock}" data-img="${book.imagen_url || ''}" title="Comprar">🛒</button>`
+      : '';
+
+    // PDF preview button (visible to all if book has PDF)
+    const pdfPreviewBtn = book.has_pdf
+      ? `<button class="btn-pdf-preview" onclick="openPdfPreview(${book.id}, '${book.nombre.replace(/'/g,"\'").replace(/"/g,'\"')}', '${(book.autor||'').replace(/'/g,"\'")}')" title="Vista previa del libro">📄 Vista previa</button>`
+      : '';
+
+    // Bestseller ribbon
+    const bestseller = book.es_bestseller ? `<div class="badge-bestseller">⭐ Bestseller</div>` : '';
+    const outBadge = outOfStock ? `<div class="badge-out">Agotado</div>` : '';
+    const lowBadge = lowStock && !outOfStock ? `<div class="badge-low">¡Últimas!</div>` : '';
+
+    // Discount badge
+    const tieneDescuento = !!book.precio_original;
+    const precioOriginal = tieneDescuento ? parseFloat(book.precio_original) : null;
+    const discountPct = tieneDescuento ? Math.round((1 - precio / precioOriginal) * 100) : 0;
+    const discountBadge = tieneDescuento ? `<div class="badge-discount">-${discountPct}%</div>` : '';
+
+    // Editorial line
+    const editLine = book.editorial
+      ? `<p class="book-editorial">${book.editorial}${book.anio_publicacion ? ' · ' + book.anio_publicacion : ''}</p>`
+      : '';
+
+    return `
+      <article class="book-card${outOfStock ? ' oos' : ''}${tieneDescuento ? ' has-discount' : ''}">
+        <div class="book-cover" style="background:${cfg.light}">
+          ${coverContent}
+          <div class="cover-placeholder" style="${placeholderDisplay}background:${cfg.light};">
+            <div class="ph-glow" style="background:radial-gradient(circle at 50% 40%, ${cfg.color}30 0%, transparent 68%)"></div>
+            <span class="ph-icon" style="color:${cfg.color}">${cfg.icon}</span>
+            <p class="ph-title" style="color:${cfg.color}">${shortTitle}</p>
+            <p class="ph-author" style="color:${cfg.color}">${shortAuthor}</p>
+          </div>
+          ${bestseller}${outBadge}${lowBadge}${discountBadge}
+        </div>
+        <div class="book-info">
+          ${tagBadge}
+          <h3 class="book-name">${book.nombre}</h3>
+          <p class="book-author">✍️ ${book.autor}</p>
+          ${editLine}
+          <div class="book-bottom">
+            <div>
+              ${tieneDescuento
+                ? `<p class="book-price">L ${precio.toFixed(2)} <span class="book-price-original">L ${precioOriginal.toFixed(2)}</span></p>`
+                : `<p class="book-price">L ${precio.toFixed(2)}</p>`
+              }
+              ${stockLabel}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.35rem;align-items:flex-end">
+              ${buyBtn}
+              ${pdfPreviewBtn}
+            </div>
+          </div>
+        </div>
+      </article>`;
+  }
+
+  function updateStats() {
+    document.getElementById('totalCount').textContent = allBooks.length;
+    document.getElementById('bestsellerCount').textContent = allBooks.filter(b => b.es_bestseller).length;
+  }
+
+  function updatePills() {
+    const c = document.getElementById('filterPills');
+    const pills = [];
+    if (currentSearch) pills.push(`<span class="pill">🔍 "${currentSearch}" <button onclick="clearSearch()">✕</button></span>`);
+    if (showOnlyBestsellers) {
+      pills.push(`<span class="pill pill-bestseller">⭐ Bestsellers <button onclick="clearCategory()">✕</button></span>`);
+    } else if (currentCategory) {
+      const cat = categories.find(x => x.id == currentCategory);
+      if (cat) { const cfg = getCfg(cat.name); pills.push(`<span class="pill" style="background:${cfg.bg};color:${cfg.color}">${cfg.icon} ${cat.name} <button onclick="clearCategory()" style="color:${cfg.color}">✕</button></span>`); }
+    }
+    c.innerHTML = pills.join('');
+    c.style.display = pills.length ? 'flex' : 'none';
+  }
+
+  window.clearSearch = () => {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('clearSearch').style.display = 'none';
+    currentSearch = ''; loadBooks('', currentCategory); updatePills();
+  };
+  window.clearCategory = () => {
+    document.getElementById('categorySelect').value = '';
+    currentCategory = '';
+    showOnlyBestsellers = false;
+    loadBooks(currentSearch, '');
+    updatePills();
+  };
+  window.clearAllFilters = () => { clearSearch(); clearCategory(); };
+
+  function showSkeleton() {
+    document.getElementById('skeletonGrid').style.display = 'grid';
+    document.getElementById('booksGrid').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('errorState').style.display = 'none';
+  }
+  function showError() {
+    document.getElementById('skeletonGrid').style.display = 'none';
+    document.getElementById('booksGrid').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('errorState').style.display = 'flex';
+  }
+
+  // ============================================================
+  // BUY MODAL — siempre cantidad 1 (copia digital)
+  // ============================================================
+  function openBuyModal(book) {
+    buyBook = book;
+    const thumbHtml = book.imagen_url
+      ? `<img src="${BACKEND_BASE}${book.imagen_url}" class="buy-thumb" alt="${book.nombre}" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
+      : '';
+    const thumbDefault = `<div class="buy-thumb-default" style="display:${book.imagen_url?'none':'flex'}">📖</div>`;
+    document.getElementById('buyBookInfo').innerHTML = `
+      <div class="buy-book-card">
+        ${thumbHtml}${thumbDefault}
+        <div>
+          <h4 class="buy-book-name">${book.nombre}</h4>
+          <p class="buy-book-price-unit">L ${parseFloat(book.precio).toFixed(2)}</p>
+          <p class="buy-book-avail">${book.stock} disponibles</p>
+        </div>
+      </div>`;
+    document.getElementById('buyTotal').textContent = `L ${parseFloat(book.precio).toFixed(2)}`;
+    document.getElementById('buyModal').style.display = 'flex';
+  }
+
+  document.getElementById('closeBuyModal')?.addEventListener('click', () => { document.getElementById('buyModal').style.display = 'none'; });
+
+  // Payment method toggle
+  document.querySelectorAll('input[name="payMethod"]').forEach(r => {
+    r.addEventListener('change', () => {
+      document.getElementById('cardFields').style.display = r.value === 'tarjeta' ? 'block' : 'none';
+    });
+  });
+  document.getElementById('cancelBuyBtn')?.addEventListener('click', () => { document.getElementById('buyModal').style.display = 'none'; });
+
+  document.getElementById('confirmBuyBtn')?.addEventListener('click', async () => {
+    if (!buyBook) return;
+    const btn = document.getElementById('confirmBuyBtn');
+    btn.disabled = true; btn.textContent = 'Procesando…';
+    try {
+      const tok = localStorage.getItem('token');
+      const r = await fetch(`${BACKEND}/sales/online`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tok}` },
+        body: JSON.stringify({
+          tipo: 'ONLINE',
+          items: [{ libro_id: buyBook.id, cantidad: 1 }],
+          notas: (() => {
+            const pm = document.querySelector('input[name="payMethod"]:checked')?.value || 'efectivo';
+            const rtn = document.getElementById('buyRtn').value.trim();
+            const c4 = document.getElementById('cardLast4')?.value.trim();
+            let n = 'Copia digital | Pago: ' + pm.charAt(0).toUpperCase() + pm.slice(1);
+            if (pm === 'tarjeta' && c4) n += ' (*' + c4 + ')';
+            if (rtn) n += ' | RTN: ' + rtn;
+            return n;
+          })()
+        })
+      });
+      if (!r.ok) {
+        const d = await r.json();
+        const msg = Array.isArray(d.detail)
+          ? d.detail.map(e => e.msg).join(', ')
+          : (d.detail || 'Error al comprar');
+        throw new Error(msg);
+      }
+      document.getElementById('buyModal').style.display = 'none';
+      Modal.success('¡Compra realizada!', `Compraste <strong>${buyBook.nombre}</strong> (copia digital). Puedes leerlo en "Mis Libros".`);
+      await loadBooks();
+    } catch(e) {
+      Modal.error('Error al comprar', e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '🛒 Confirmar compra';
+    }
+  });
+
+  // ── PDF PREVIEW ──────────────────────────────────────────────────────────
+  let prevPdfDoc = null, prevPage = 1;
+  const prevCanvas = document.getElementById('prevCanvas');
+  const prevCtx = prevCanvas ? prevCanvas.getContext('2d') : null;
+
+  // Block right-click on preview
+  document.getElementById('pdfPreviewModal')?.addEventListener('contextmenu', e => e.preventDefault());
+
+  window.openPdfPreview = async function(bookId, title, author) {
+    prevPage = 1;
+    document.getElementById('prevBookTitle').textContent = title;
+    document.getElementById('prevBookAuthor').textContent = author;
+    document.getElementById('prevCurrentPage').textContent = '1';
+    document.getElementById('prevTotalPages').textContent = '—';
+    document.getElementById('prevCanvas').style.display = 'none';
+    document.getElementById('prevBlurGate').style.display = 'none';
+    document.getElementById('prevLoading').style.display = 'flex';
+    document.getElementById('pdfPreviewModal').style.display = 'flex';
+
+    try {
+      const r = await fetch(`${BACKEND}/books/pdf-preview/${bookId}`);
+      if (!r.ok) throw new Error('No disponible');
+      const buf = await r.arrayBuffer();
+      prevPdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+      document.getElementById('prevTotalPages').textContent = prevPdfDoc.numPages;
+      document.getElementById('prevLoading').style.display = 'none';
+      document.getElementById('prevCanvas').style.display = 'block';
+      await renderPrevPage(1);
+    } catch(e) {
+      document.getElementById('prevLoading').innerHTML = '<p style="color:#dc2626">No hay vista previa disponible para este libro.</p>';
+    }
+  };
+
+  async function renderPrevPage(num) {
+    if (!prevPdfDoc) return;
+    const page = await prevPdfDoc.getPage(num);
+    const wrap = document.getElementById('prevCanvasWrap');
+    const scale = (wrap.clientWidth * 0.88) / page.getViewport({scale:1}).width;
+    const viewport = page.getViewport({ scale });
+    prevCanvas.width = viewport.width;
+    prevCanvas.height = viewport.height;
+    await page.render({ canvasContext: prevCtx, viewport }).promise;
+    document.getElementById('prevCurrentPage').textContent = num;
+    document.getElementById('prevPdfPrev').disabled = num <= 1;
+    // Last preview page shows blur gate for next
+    const isLast = num >= prevPdfDoc.numPages;
+    document.getElementById('nextPdfPrev').disabled = isLast;
+    document.getElementById('prevBlurGate').style.display = isLast ? 'flex' : 'none';
+  }
+
+  document.getElementById('prevPdfPrev')?.addEventListener('click', () => {
+    if (prevPage > 1) { prevPage--; renderPrevPage(prevPage); }
+  });
+  document.getElementById('nextPdfPrev')?.addEventListener('click', () => {
+    if (prevPdfDoc && prevPage < prevPdfDoc.numPages) { prevPage++; renderPrevPage(prevPage); }
+  });
+  document.getElementById('closePdfPreview')?.addEventListener('click', () => {
+    document.getElementById('pdfPreviewModal').style.display = 'none';
+    prevPdfDoc = null;
+  });
+
+  // LOGOUT
   document.getElementById('logoutBtn')?.addEventListener('click', () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    localStorage.removeItem('token'); localStorage.removeItem('user');
     document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     document.cookie = 'user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     window.location.href = '/catalogo';
   });
-  
-  // Búsqueda
-  document.getElementById('searchBtn')?.addEventListener('click', async () => {
-    const search = document.getElementById('searchInput').value;
-    const categoria_id = document.getElementById('categorySelect').value;
-    
-    const params = new URLSearchParams();
-    if (search) params.append('search', search);
-    if (categoria_id) params.append('categoria_id', categoria_id);
-    
-    try {
-      const response = await fetch(`${API_URL}/books/catalog?${params}`);
-      const books = await response.json();
-      updateBooksGrid(books);
-    } catch (error) {
-      console.error('Error al buscar:', error);
-    }
-  });
-  
-  // Filtrar por categoría
-  document.getElementById('categorySelect')?.addEventListener('change', async () => {
-    document.getElementById('searchBtn').click();
-  });
-  
-  function updateBooksGrid(books) {
-    const grid = document.getElementById('booksGrid');
-    
-    if (books.length === 0) {
-      grid.innerHTML = '<div class="empty-state"><p>No se encontraron libros.</p></div>';
-      return;
-    }
-    
-    grid.innerHTML = books.map(book => `
-      <div class="book-card">
-        <div class="book-image">
-          <div class="book-placeholder">📖</div>
-          ${book.es_bestseller ? '<span class="bestseller-badge">⭐ Bestseller</span>' : ''}
-          ${book.stock === 0 ? '<span class="out-of-stock">Agotado</span>' : ''}
-        </div>
-        <div class="book-info">
-          ${book.categoria ? `<span class="book-category">${book.categoria.name}</span>` : ''}
-          <h3 class="book-title">${book.nombre}</h3>
-          <p class="book-author">por ${book.autor}</p>
-          <p class="book-price">L ${book.precio.toFixed(2)}</p>
-          <p class="book-stock ${book.stock < 5 ? 'low-stock' : ''}">
-            ${book.stock > 0 ? `${book.stock} disponibles` : 'Sin stock'}
-          </p>
-        </div>
-      </div>
-    `).join('');
-  }
+
+  init();
 </script>
 
-<style>
-  .catalog-nav {
-    background: white;
-    padding: 1rem 2rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+<style is:global>
+  /* NAV */
+  .top-nav { position:sticky; top:0; z-index:200; background:rgba(13,27,46,0.96); backdrop-filter:blur(10px); border-bottom:1px solid rgba(255,255,255,0.08); }
+  .nav-inner { max-width:1400px; margin:0 auto; padding:0 2rem; display:flex; align-items:center; justify-content:space-between; height:64px; }
+  .brand { display:flex; align-items:center; gap:0.75rem; text-decoration:none; }
+  .brand-icon { font-size:1.6rem; }
+  .brand-name { font-family:var(--font-display); font-size:1.35rem; font-weight:700; color:white; }
+  .nav-actions { display:flex; align-items:center; gap:0.75rem; }
+  .nav-greeting { color:rgba(255,255,255,0.7); font-size:0.875rem; }
+  .btn-outline-nav { border:1.5px solid rgba(255,255,255,0.4); color:white; background:transparent; }
+  .btn-outline-nav:hover { background:rgba(255,255,255,0.1); }
+  .btn-ghost-nav { background:transparent; color:rgba(255,255,255,0.7); }
+  .btn-ghost-nav:hover { color:white; }
+
+  /* HERO */
+  .hero-section { position:relative; background:linear-gradient(135deg,var(--navy) 0%,var(--blue-dark) 50%,#1e3a6e 100%); padding:4rem 2rem 3.5rem; overflow:hidden; }
+  .hero-content { max-width:800px; margin:0 auto; text-align:center; position:relative; z-index:2; }
+  .hero-eyebrow { font-size:0.85rem; font-weight:600; letter-spacing:0.1em; text-transform:uppercase; color:var(--beige); margin-bottom:1rem; }
+  .hero-title { font-family:var(--font-display); font-size:clamp(2rem,5vw,3.5rem); font-weight:700; color:white; line-height:1.15; margin-bottom:0.75rem; }
+  .hero-accent { color:var(--beige); }
+  .hero-sub { color:rgba(255,255,255,0.65); font-size:1.1rem; margin-bottom:2.5rem; }
+  .hero-search { display:flex; gap:0.75rem; flex-wrap:wrap; }
+  .search-wrap { flex:1; min-width:280px; position:relative; display:flex; align-items:center; }
+  .search-icon { position:absolute; left:1rem; font-size:1rem; pointer-events:none; }
+  .search-input { width:100%; padding:0.875rem 2.75rem; border:1.5px solid rgba(255,255,255,0.2); border-radius:var(--radius-sm); font-family:var(--font-body); font-size:0.95rem; background:rgba(255,255,255,0.12); color:white; backdrop-filter:blur(10px); transition:all 0.2s; }
+  .search-input::placeholder { color:rgba(255,255,255,0.5); }
+  .search-input:focus { outline:none; background:rgba(255,255,255,0.18); border-color:var(--beige); }
+  .search-clear { position:absolute; right:0.75rem; background:rgba(255,255,255,0.15); border:none; color:white; width:22px; height:22px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.7rem; }
+  .category-select { padding:0.875rem 1rem; border-radius:var(--radius-sm); border:1.5px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.12); color:white; font-family:var(--font-body); font-size:0.9rem; cursor:pointer; backdrop-filter:blur(10px); min-width:200px; }
+  .category-select option { background:var(--navy); color:white; }
+  .category-select:focus { outline:none; border-color:var(--beige); }
+  .hero-shapes { position:absolute; inset:0; z-index:1; overflow:hidden; }
+  .shape { position:absolute; border-radius:50%; opacity:0.06; }
+  .shape-1 { width:400px; height:400px; background:var(--beige); top:-100px; right:-100px; }
+  .shape-2 { width:250px; height:250px; background:var(--blue-light); bottom:-80px; left:5%; }
+  .shape-3 { width:150px; height:150px; background:white; top:30%; right:15%; }
+
+  /* MAIN */
+  .main-wrap { max-width:1400px; margin:0 auto; padding:2.5rem 2.5rem; }
+  body { background: #eef1f7 !important; }
+
+  /* STATS BAR */
+  .stats-bar { background:white; border-radius:var(--radius); border:1px solid var(--gray-200); padding:1rem 1.5rem; margin-bottom:1.5rem; box-shadow:var(--shadow-sm); }
+  .stats-inner { display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap; }
+  .stat-item { display:flex; align-items:center; gap:0.5rem; }
+  .stat-icon { font-size:1.1rem; }
+  .stat-num { font-size:1.3rem; font-weight:700; color:var(--blue-mid); font-family:var(--font-display); }
+  .stat-lbl { font-size:0.85rem; color:var(--gray-400); }
+  .stat-divider { width:1px; height:24px; background:var(--gray-200); }
+
+  /* PILLS */
+  .filter-pills { display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem; }
+  .pill-bestseller { background:linear-gradient(135deg,#fef3c7,#fde68a) !important; color:#92400e !important; border-color:#f59e0b !important; }
+  .pill { display:inline-flex; align-items:center; gap:0.4rem; background:var(--blue-pale); color:var(--blue-mid); border-radius:999px; padding:0.35rem 0.85rem; font-size:0.8rem; font-weight:500; }
+  .pill button { background:none; border:none; cursor:pointer; font-size:0.7rem; margin-left:2px; }
+
+  /* TOOLBAR */
+  .toolbar { display:flex; align-items:center; justify-content:flex-end; margin-bottom:1.5rem; }
+  .sort-group { display:flex; align-items:center; gap:0.5rem; }
+  .sort-label { font-size:0.85rem; color:var(--gray-400); font-weight:500; }
+  .sort-select { padding:0.5rem 0.75rem; border:1.5px solid var(--gray-200); border-radius:var(--radius-sm); font-family:var(--font-body); font-size:0.85rem; color:var(--gray-800); background:white; cursor:pointer; }
+  .sort-select:focus { outline:none; border-color:var(--blue-mid); }
+
+  /* BOOKS GRID — columnas fijas de 230px con buen espacio entre ellas */
+  .books-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:2rem; }
+
+  /* ============================================================
+     BOOK CARD — altura fija, espaciado generoso
+     ============================================================ */
+  .book-card { background:white; border-radius:var(--radius); overflow:hidden; box-shadow:0 2px 16px rgba(13,27,46,0.12), 0 1px 4px rgba(13,27,46,0.06); border:1px solid rgba(13,27,46,0.07); transition:all 0.3s cubic-bezier(0.25,0.8,0.25,1); display:flex; flex-direction:column; }
+  .book-card:hover { transform:translateY(-5px); box-shadow:0 12px 36px rgba(13,27,46,0.14); border-color:transparent; }
+  .book-card.oos { opacity:0.7; }
+
+  /* COVER — altura fija para que todas las tarjetas sean uniformes */
+  .book-cover { position:relative; height:200px; overflow:hidden; flex-shrink:0; background:transparent; }
+  .cover-img { width:100%; height:100%; object-fit:contain; display:block; transition:transform 0.4s ease; }
+  .book-card:hover .cover-img { transform:scale(1.04); }
+
+  /* PLACEHOLDER COVER — icono animado con título y autor */
+  .cover-placeholder { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.4rem; padding:1rem; overflow:hidden; transition:transform 0.4s ease; }
+  .book-card:hover .cover-placeholder { transform:scale(1.04); }
+  .ph-glow { position:absolute; inset:0; pointer-events:none; }
+  .ph-icon { font-size:3.4rem; line-height:1; filter:drop-shadow(0 4px 10px rgba(0,0,0,0.15)); animation:ph-float 3s ease-in-out infinite; display:block; z-index:1; }
+  @keyframes ph-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-9px)} }
+  .ph-title { font-family:var(--font-display); font-size:0.73rem; font-weight:700; text-align:center; line-height:1.4; max-width:90%; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; z-index:1; margin-top:0.15rem; }
+  .ph-author { font-size:0.65rem; font-weight:500; text-align:center; opacity:0.75; max-width:90%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; z-index:1; }
+
+  /* BADGES sobre la portada */
+  .badge-bestseller { position:absolute; top:8px; left:8px; background:linear-gradient(135deg,#f59e0b,#d97706); color:white; padding:3px 9px; border-radius:999px; font-size:0.67rem; font-weight:700; box-shadow:0 2px 8px rgba(245,158,11,0.4); z-index:2; }
+  .badge-out { position:absolute; inset:0; background:rgba(0,0,0,0.52); display:flex; align-items:center; justify-content:center; color:white; font-weight:700; font-size:0.9rem; z-index:2; }
+  .badge-low { position:absolute; top:8px; right:8px; background:linear-gradient(135deg,#ef4444,#dc2626); color:white; padding:3px 9px; border-radius:999px; font-size:0.65rem; font-weight:700; z-index:2; }
+  .badge-discount { position:absolute; bottom:8px; left:8px; background:linear-gradient(135deg,#dc2626,#991b1b); color:white; padding:4px 10px; border-radius:999px; font-size:0.72rem; font-weight:800; z-index:2; box-shadow:0 2px 8px rgba(220,38,38,0.45); letter-spacing:0.02em; }
+  .book-price-original { font-size:0.78rem; color:#94a3b8; text-decoration:line-through; margin-left:4px; font-weight:400; }
+  .book-card.has-discount .book-price { color:#dc2626; }
+
+  /* BOOK INFO — más padding y gaps */
+  .book-info { padding:1rem 1.125rem 1.125rem; flex:1; display:flex; flex-direction:column; gap:0.4rem; }
+  .book-cat-tag { display:inline-block; padding:3px 9px; border-radius:999px; font-size:0.67rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; }
+  .book-name { font-family:var(--font-display); font-size:0.97rem; font-weight:700; color:var(--navy); line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin-top:0.1rem; }
+  .book-author { font-size:0.78rem; color:var(--gray-400); font-weight:500; }
+  .book-editorial { font-size:0.72rem; color:var(--gray-400); }
+  .book-bottom { display:flex; align-items:flex-end; justify-content:space-between; margin-top:auto; padding-top:0.75rem; border-top:1px solid var(--gray-100); gap:0.5rem; }
+  .book-price { font-size:1.05rem; font-weight:700; color:var(--blue-mid); }
+  .book-stock { font-size:0.72rem; font-weight:600; margin-top:2px; }
+  .book-stock.ok { color:#16a34a; }
+  .book-stock.low { color:#d97706; }
+  .book-stock.out { color:#dc2626; }
+  .btn-buy { width:34px; height:34px; border-radius:50%; background:var(--blue-mid); color:white; border:none; cursor:pointer; font-size:0.85rem; display:flex; align-items:center; justify-content:center; transition:all 0.2s; flex-shrink:0; box-shadow:0 2px 8px rgba(37,99,235,0.3); }
+  .btn-buy:hover { background:var(--blue-dark); transform:scale(1.1); }
+
+  /* SKELETON — misma altura que la cover real */
+  @keyframes shimmer { 0%{background-position:-500px 0} 100%{background-position:500px 0} }
+  .skeleton { background:linear-gradient(90deg,var(--gray-100) 25%,var(--gray-200) 50%,var(--gray-100) 75%); background-size:1000px 100%; animation:shimmer 1.5s infinite linear; border-radius:var(--radius-sm); }
+  .book-skeleton { background:white; border-radius:var(--radius); overflow:hidden; border:1px solid var(--gray-200); }
+  .sk-img { height:200px; border-radius:0; }
+  .sk-body { padding:1rem 1.125rem 1.125rem; display:flex; flex-direction:column; gap:0.6rem; }
+  .sk-badge { height:16px; width:65px; border-radius:999px; }
+  .sk-title { height:14px; }
+  .sk-short { width:72%; }
+  .sk-author { height:12px; width:52%; }
+  .sk-price { height:17px; width:40%; margin-top:0.3rem; }
+
+  /* EMPTY / ERROR */
+  .empty-state,.error-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:5rem 2rem; text-align:center; gap:1rem; }
+  .empty-illustration { font-size:4rem; }
+  .empty-title { font-family:var(--font-display); font-size:1.5rem; color:var(--navy); }
+  .empty-desc { color:var(--gray-400); max-width:360px; }
+
+  /* BUY MODAL */
+  .buy-modal-overlay { position:fixed; inset:0; background:rgba(13,27,46,0.65); backdrop-filter:blur(4px); z-index:8000; display:flex; align-items:center; justify-content:center; padding:1rem; }
+  .buy-modal-box { background:white; border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); width:100%; max-width:460px; overflow:hidden; animation:slideUp 0.25s ease; }
+  @keyframes slideUp { from{opacity:0;transform:translateY(20px) scale(0.97)} to{opacity:1;transform:none} }
+  .buy-modal-header { display:flex; align-items:center; justify-content:space-between; padding:1.25rem 1.5rem; border-bottom:1px solid var(--gray-100); }
+  .buy-modal-title { font-family:var(--font-display); font-size:1.25rem; color:var(--navy); }
+  .buy-modal-close { background:var(--gray-100); border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.8rem; }
+  .buy-modal-body { padding:1.5rem; display:flex; flex-direction:column; gap:1.25rem; }
+  .buy-book-card { display:flex; gap:1rem; align-items:flex-start; padding:1rem; background:var(--gray-50); border-radius:var(--radius-sm); border:1px solid var(--gray-200); }
+  .buy-thumb { width:70px; height:95px; object-fit:cover; border-radius:6px; display:block; }
+  .buy-thumb-default { width:70px; height:95px; background:linear-gradient(135deg,var(--blue-dark),var(--navy)); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:1.75rem; }
+  .buy-book-name { font-family:var(--font-display); font-size:1rem; font-weight:600; color:var(--navy); margin-bottom:0.25rem; }
+  .buy-book-price-unit { font-size:0.875rem; color:var(--blue-mid); font-weight:600; }
+  .buy-book-avail { font-size:0.8rem; color:var(--gray-400); }
+  .buy-digital-notice { display:flex; gap:0.875rem; align-items:flex-start; background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:10px; padding:0.875rem 1rem; }
+  .buy-digital-icon { font-size:1.5rem; flex-shrink:0; }
+  .buy-digital-title { font-weight:700; font-size:0.85rem; color:#1d4ed8; margin-bottom:2px; }
+  .buy-digital-desc { font-size:0.78rem; color:#3b82f6; line-height:1.4; }
+  .buy-total-row { display:flex; justify-content:space-between; align-items:center; padding:1rem; background:var(--blue-ghost); border-radius:var(--radius-sm); border:1.5px solid var(--blue-pale); }
+  .buy-total-amount { font-family:var(--font-display); font-size:1.35rem; font-weight:700; color:var(--blue-mid); }
+  .buy-modal-footer { display:flex; justify-content:flex-end; gap:0.75rem; padding:1rem 1.5rem 1.5rem; }
+
+  .buy-section-title { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-400); margin:0.875rem 0 0.5rem; }
+  .pay-method-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:0.5rem; margin-bottom:0.75rem; }
+  .pay-method-opt { cursor:pointer; }
+  .pay-method-opt input { display:none; }
+  .pay-method-card { display:flex; align-items:center; justify-content:center; padding:0.55rem; border:1.5px solid var(--gray-200); border-radius:var(--radius-sm); font-size:0.78rem; font-weight:600; transition:all 0.15s; background:white; gap:0.3rem; }
+  .pay-method-opt input:checked + .pay-method-card { border-color:var(--blue-mid); background:var(--blue-ghost); color:var(--blue-mid); }
+  .pay-method-card:hover { border-color:var(--blue-mid); }
+  .card-fields-wrap { margin-bottom:0.5rem; }
+
+  @media(max-width:768px) {
+    .hero-section { padding:3rem 1rem 2rem; }
+    .main-wrap { padding:1.25rem 1rem; }
+    .books-grid { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:1.25rem; }
+    .book-cover { height:170px; }
+    .sk-img { height:170px; }
+    .book-info { padding:0.875rem; }
+    .nav-inner { padding:0 1rem; }
+    .hero-search { flex-direction:column; }
+    .category-select { width:100%; }
   }
-  
-  .nav-brand {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 1.25rem;
-    font-weight: 600;
-  }
-  
-  .logo {
-    font-size: 1.5rem;
-  }
-  
-  .nav-links {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-  
-  .user-name {
-    color: #64748b;
-  }
-  
-  .catalog-main {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem;
-  }
-  
-  .catalog-header {
-    text-align: center;
-    margin-bottom: 2rem;
-    color: white;
-  }
-  
-  .catalog-header h1 {
-    font-size: 2.5rem;
-    margin-bottom: 0.5rem;
-  }
-  
-  .filters {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-  }
-  
-  .search-box {
-    display: flex;
-    gap: 0.5rem;
-    flex: 1;
-    min-width: 300px;
-  }
-  
-  .search-box input {
-    flex: 1;
-  }
-  
-  .category-filter {
-    min-width: 200px;
-  }
-  
-  .books-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1.5rem;
-  }
-  
-  .empty-state {
-    text-align: center;
-    padding: 3rem;
-    color: white;
-  }
-  
-  .btn-sm {
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
-  }
-  
-  .btn-outline {
-    background: transparent;
-    border: 2px solid #3b82f6;
-    color: #3b82f6;
-  }
+  /* ── PDF PREVIEW BUTTON ── */
+  .btn-pdf-preview { background:var(--gray-100);color:var(--gray-600);border:1px solid var(--gray-200);border-radius:6px;padding:4px 9px;font-size:0.68rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.15s; }
+  .btn-pdf-preview:hover { background:#eff6ff;color:var(--blue-mid);border-color:var(--blue-mid); }
+
+  /* ── PDF PREVIEW MODAL ── */
+  .pdf-prev-overlay { position:fixed;inset:0;background:rgba(13,27,46,0.82);backdrop-filter:blur(6px);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem; }
+  .pdf-prev-box { background:white;border-radius:12px;width:100%;max-width:720px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+  .pdf-prev-topbar { display:flex;align-items:center;justify-content:space-between;padding:0.875rem 1.25rem;background:#0d1b2e;gap:1rem;flex-shrink:0; }
+  .pdf-prev-meta { flex:1;min-width:0; }
+  .pdf-prev-title { font-weight:700;font-size:0.9rem;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+  .pdf-prev-author { font-size:0.72rem;color:rgba(255,255,255,0.45); }
+  .pdf-prev-controls { display:flex;align-items:center;gap:0.5rem; }
+  .pdf-prev-nav { width:28px;height:28px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:white;border-radius:6px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center; }
+  .pdf-prev-nav:disabled { opacity:0.3;cursor:default; }
+  .pdf-prev-page { font-size:0.78rem;color:rgba(255,255,255,0.6);white-space:nowrap; }
+  .pdf-prev-lock { font-size:0.72rem;font-weight:700;color:#f59e0b;background:rgba(245,158,11,0.15);padding:3px 8px;border-radius:999px;border:1px solid rgba(245,158,11,0.3); }
+  .pdf-prev-close { width:28px;height:28px;background:rgba(255,255,255,0.08);border:none;color:white;border-radius:50%;cursor:pointer;font-size:0.8rem; }
+  .pdf-prev-close:hover { background:rgba(239,68,68,0.4); }
+  .pdf-prev-canvas-wrap { flex:1;overflow-y:auto;overflow-x:auto;display:flex;align-items:flex-start;justify-content:center;padding:1.25rem;background:#1f2937;position:relative;min-height:300px; }
+  .pdf-prev-canvas-wrap canvas { box-shadow:0 4px 20px rgba(0,0,0,0.4);border-radius:2px;display:block; }
+  .pdf-prev-loading { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.75rem;color:rgba(255,255,255,0.5);padding:3rem; }
+  @keyframes pdf-spin { to { transform:rotate(360deg); } }
+  .pdf-prev-spinner { width:36px;height:36px;border:3px solid rgba(255,255,255,0.15);border-top-color:#2563eb;border-radius:50%;animation:pdf-spin 0.8s linear infinite; }
+  .pdf-prev-blur-gate { position:absolute;inset:0;background:linear-gradient(to bottom,rgba(31,41,55,0) 0%,rgba(31,41,55,0.85) 30%,rgba(31,41,55,0.97) 100%);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:10; }
+  .pdf-prev-blur-content { text-align:center;color:white;padding:2rem;max-width:320px; }
+  .pdf-prev-lock-icon { font-size:3rem;margin-bottom:0.75rem; }
+  .pdf-prev-blur-content h3 { font-size:1.1rem;font-weight:700;margin-bottom:0.5rem; }
+  .pdf-prev-blur-content p { font-size:0.85rem;color:rgba(255,255,255,0.65);margin-bottom:1.25rem;line-height:1.5; }
+  .pdf-prev-drm { position:fixed;inset:0;z-index:9501;pointer-events:none; }
 </style>

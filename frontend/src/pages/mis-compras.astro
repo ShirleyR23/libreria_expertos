@@ -1,148 +1,149 @@
 ---
-// Página de historial de compras del cliente
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import TableComponent from '../components/TableComponent.astro';
-
-// Verificar que sea cliente
 const userStr = Astro.cookies.get('user')?.value;
 let user = null;
-try {
-  user = userStr ? JSON.parse(userStr) : null;
-} catch (e) {}
-
-if (!user || (user.role_name !== 'CLIENTE' && user.role_name !== 'ADMIN')) {
-  return Astro.redirect('/login');
-}
-
-const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-
-// Obtener compras del cliente
-let purchases = [];
-try {
-  const response = await fetch(`${API_URL}/sales/my-purchases`, {
-    headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
-  });
-  if (response.ok) {
-    purchases = await response.json();
-  }
-} catch (e) {
-  console.error('Error al cargar compras:', e);
-}
-
-const columns = [
-  { key: 'id', label: 'ID' },
-  { key: 'tipo', label: 'Tipo', format: 'badge' },
-  { key: 'status', label: 'Estado', format: 'badge' },
-  { key: 'total', label: 'Total', format: 'currency' },
-  { key: 'created_at', label: 'Fecha', format: 'date' },
-];
+try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
+if (!user || (user.role_name !== 'CLIENTE' && user.role_name !== 'ADMIN')) return Astro.redirect('/login');
 ---
-
 <DashboardLayout title="Mis Compras" userRole={user.role_name}>
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">Historial de Compras</h2>
-    </div>
-    
-    <TableComponent 
-      columns={columns} 
-      data={purchases}
-      emptyMessage="No has realizado ninguna compra aún"
-    />
+
+  <div class="inv-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem">
+    <div class="inv-stat-card blue"><div class="inv-stat-num" id="statTotal">—</div><div class="inv-stat-lbl">Total compras</div></div>
+    <div class="inv-stat-card green"><div class="inv-stat-num" id="statGastado">—</div><div class="inv-stat-lbl">Total gastado</div></div>
+    <div class="inv-stat-card orange"><div class="inv-stat-num" id="statCompletadas">—</div><div class="inv-stat-lbl">Completadas</div></div>
   </div>
-  
-  {purchases.length > 0 && (
-    <div class="card mt-4">
-      <div class="card-header">
-        <h2 class="card-title">Detalle de Compras</h2>
-      </div>
-      <div class="purchases-detail">
-        {purchases.map(purchase => (
-          <div class="purchase-card">
-            <div class="purchase-header">
-              <div>
-                <strong>Compra #{purchase.id}</strong>
-                <span class={`badge badge-${purchase.status.toLowerCase()}`}>{purchase.status}</span>
-              </div>
-              <span class="purchase-total">L {purchase.total.toFixed(2)}</span>
-            </div>
-            {purchase.items && (
-              <div class="purchase-items">
-                {purchase.items.map(item => (
-                  <div class="item-row">
-                    <span>{item.cantidad}x {item.libro_nombre || `Libro #${item.libro_id}`}</span>
-                    <span>L {item.subtotal.toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {purchase.invoice && (
-              <div class="invoice-info">
-                <small>Factura: {purchase.invoice.numero_factura}</small>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+
+  <div id="loadingArea" class="loading-wrap">
+    <div class="loading-spinner"></div>
+    <p style="color:var(--gray-400);margin-top:0.75rem">Cargando tus compras…</p>
+  </div>
+  <div id="errorArea" style="display:none" class="error-wrap">
+    <p id="errorMsg" style="color:var(--danger);font-weight:600;margin-bottom:1rem"></p>
+    <button onclick="loadPurchases()" class="btn btn-secondary btn-sm">Reintentar</button>
+  </div>
+  <div id="emptyArea" style="display:none" class="empty-purchases">
+    <div style="font-size:4rem;margin-bottom:1rem">🛒</div>
+    <h3 style="font-family:var(--font-display);font-size:1.5rem;color:var(--navy);margin-bottom:0.5rem">Sin compras todavía</h3>
+    <p style="color:var(--gray-400);margin-bottom:1.5rem">Explora nuestro catálogo y realiza tu primera compra.</p>
+    <a href="/catalogo" class="btn btn-primary">Ver catálogo</a>
+  </div>
+
+  <!-- TABLE -->
+  <div id="tableWrap" style="display:none" class="table-card">
+    <div class="table-scroll">
+      <table class="mc-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th>Artículos</th>
+            <th>Subtotal</th>
+            <th>ISV 15%</th>
+            <th>Total</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
     </div>
-  )}
+  </div>
+
 </DashboardLayout>
 
-<style>
-  .mt-4 {
-    margin-top: 1.5rem;
+<script is:inline>
+  const API = 'http://localhost:8000/api/v1';
+
+  async function loadPurchases() {
+    const token = localStorage.getItem('token');
+    document.getElementById('loadingArea').style.display = 'flex';
+    document.getElementById('errorArea').style.display = 'none';
+    document.getElementById('emptyArea').style.display = 'none';
+    document.getElementById('tableWrap').style.display = 'none';
+    try {
+      const r = await fetch(API + '/sales/my-purchases', { headers: { 'Authorization': 'Bearer ' + token } });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(Array.isArray(d.detail) ? d.detail.map(function(e){ return e.msg; }).join(', ') : (d.detail || 'Error ' + r.status));
+      }
+      const purchases = await r.json();
+      document.getElementById('loadingArea').style.display = 'none';
+
+      const total = purchases.reduce(function(s, p){ return s + parseFloat(p.total || 0); }, 0);
+      document.getElementById('statTotal').textContent = purchases.length;
+      document.getElementById('statGastado').textContent = 'L ' + total.toFixed(2);
+      document.getElementById('statCompletadas').textContent = purchases.filter(function(p){ return p.status === 'COMPLETADA'; }).length;
+
+      if (!purchases.length) { document.getElementById('emptyArea').style.display = 'flex'; return; }
+
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = purchases.map(function(p) {
+        var sc = p.status === 'COMPLETADA' ? 'badge-success' : p.status === 'CANCELADA' ? 'badge-danger' : 'badge-warning';
+        var fecha = new Date(p.created_at).toLocaleDateString('es-HN', { day:'2-digit', month:'short', year:'numeric' });
+        var articulos = (p.items || []).map(function(i){ return i.cantidad + '× ' + (i.libro_nombre || 'Libro'); }).join(', ');
+        var hasInvoice = p.invoice || (p.items && p.items.length > 0);
+        var invBtns = hasInvoice
+          ? '<a href="/factura?venta=' + p.id + '" class="btn-action btn-ver" title="Ver factura">🧾 Ver</a>' +
+            '<a href="/factura?venta=' + p.id + '" onclick="setTimeout(function(){window.print()},800)" class="btn-action btn-dl" title="Descargar PDF">⬇ PDF</a>'
+          : '<span style="color:var(--gray-300);font-size:0.75rem">Sin factura</span>';
+        return '<tr>' +
+          '<td><span class="sale-badge">#' + p.id + '</span></td>' +
+          '<td class="date-cell">' + fecha + '</td>' +
+          '<td><span class="type-badge ' + (p.tipo === 'ONLINE' ? 'type-online' : 'type-presencial') + '">' + p.tipo + '</span></td>' +
+          '<td class="items-cell" title="' + articulos + '">' + articulos + '</td>' +
+          '<td class="money-cell">L ' + parseFloat(p.subtotal).toFixed(2) + '</td>' +
+          '<td class="money-cell isv-cell">L ' + parseFloat(p.impuesto).toFixed(2) + '</td>' +
+          '<td class="money-cell total-cell">L ' + parseFloat(p.total).toFixed(2) + '</td>' +
+          '<td><span class="badge ' + sc + '">' + p.status + '</span></td>' +
+          '<td><div class="actions-cell">' + invBtns + '</div></td>' +
+          '</tr>';
+      }).join('');
+      document.getElementById('tableWrap').style.display = 'block';
+    } catch(e) {
+      document.getElementById('loadingArea').style.display = 'none';
+      document.getElementById('errorMsg').textContent = e.message;
+      document.getElementById('errorArea').style.display = 'flex';
+    }
   }
-  
-  .purchases-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  
-  .purchase-card {
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 1rem;
-  }
-  
-  .purchase-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.75rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  
-  .purchase-header > div {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  
-  .purchase-total {
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: #3b82f6;
-  }
-  
-  .purchase-items {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  
-  .item-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.875rem;
-    color: #64748b;
-  }
-  
-  .invoice-info {
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid #e2e8f0;
-    color: #64748b;
-  }
+
+  loadPurchases();
+</script>
+
+<style is:global>
+  .inv-stat-card { background:white; border-radius:var(--radius); padding:1.25rem 1.5rem; border:1px solid var(--gray-200); box-shadow:var(--shadow-sm); }
+  .inv-stat-num { font-size:1.75rem; font-weight:700; font-family:var(--font-display); }
+  .inv-stat-lbl { font-size:0.8rem; color:var(--gray-400); margin-top:2px; font-weight:500; }
+  .inv-stat-card.blue .inv-stat-num { color:var(--blue-mid); }
+  .inv-stat-card.green .inv-stat-num { color:var(--success); font-size:1.4rem; }
+  .inv-stat-card.orange .inv-stat-num { color:var(--warning); }
+
+  .loading-wrap,.error-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4rem 2rem; background:white; border-radius:var(--radius); border:1px solid var(--gray-200); text-align:center; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loading-spinner { width:44px; height:44px; border:3px solid var(--gray-200); border-top-color:var(--blue-mid); border-radius:50%; animation:spin 0.8s linear infinite; }
+  .empty-purchases { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:5rem 2rem; text-align:center; background:white; border-radius:var(--radius); border:1px solid var(--gray-200); }
+
+  .table-card { background:white; border-radius:var(--radius); border:1px solid var(--gray-200); box-shadow:var(--shadow-sm); overflow:hidden; }
+  .table-scroll { overflow-x:auto; }
+  .mc-table { width:100%; border-collapse:collapse; }
+  .mc-table th { padding:0.75rem 1rem; text-align:left; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-400); font-weight:700; background:var(--gray-50); border-bottom:2px solid var(--gray-200); white-space:nowrap; }
+  .mc-table td { padding:0.75rem 1rem; border-bottom:1px solid var(--gray-100); vertical-align:middle; font-size:0.85rem; }
+  .mc-table tbody tr:last-child td { border-bottom:none; }
+  .mc-table tbody tr:hover { background:var(--gray-50); }
+
+  .sale-badge { font-family:monospace; font-size:0.78rem; background:var(--gray-100); padding:2px 7px; border-radius:4px; color:var(--gray-600); font-weight:700; }
+  .date-cell { color:var(--gray-500); white-space:nowrap; font-size:0.8rem; }
+  .type-badge { font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:999px; letter-spacing:0.04em; }
+  .type-online { background:var(--blue-pale); color:var(--blue-mid); }
+  .type-presencial { background:#dcfce7; color:#166534; }
+  .items-cell { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--gray-700); }
+  .money-cell { font-family:monospace; font-size:0.85rem; text-align:right; white-space:nowrap; color:var(--gray-700); }
+  .isv-cell { color:var(--gray-400); }
+  .total-cell { font-weight:700; color:var(--blue-mid); font-size:0.9rem; }
+  .actions-cell { display:flex; gap:0.4rem; align-items:center; }
+  .btn-action { display:inline-flex; align-items:center; gap:3px; padding:4px 10px; border-radius:6px; font-size:0.72rem; font-weight:700; text-decoration:none; cursor:pointer; white-space:nowrap; transition:all 0.15s; }
+  .btn-ver { background:var(--blue-pale); color:var(--blue-mid); border:1px solid rgba(37,99,235,0.2); }
+  .btn-ver:hover { background:var(--blue-mid); color:white; }
+  .btn-dl { background:#f0fdf4; color:#166534; border:1px solid rgba(22,101,52,0.2); }
+  .btn-dl:hover { background:#166534; color:white; }
 </style>

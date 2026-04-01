@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280" width="200" height="280">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a3560"/>
+      <stop offset="100%" style="stop-color:#0d1b2e"/>
+    </linearGradient>
+    <linearGradient id="spine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#c8a97e;stop-opacity:0.3"/>
+      <stop offset="100%" style="stop-color:transparent"/>
+    </linearGradient>
+  </defs>
+  <!-- Book cover -->
+  <rect width="200" height="280" fill="url(#bg)" rx="4"/>
+  <!-- Spine highlight -->
+  <rect x="0" y="0" width="18" height="280" fill="url(#spine)" rx="4 0 0 4"/>
+  <!-- Top decorative line -->
+  <rect x="24" y="20" width="152" height="2" fill="#c8a97e" opacity="0.5" rx="1"/>
+  <!-- Bottom decorative line -->
+  <rect x="24" y="258" width="152" height="2" fill="#c8a97e" opacity="0.5" rx="1"/>
+  <!-- Book icon -->
+  <text x="100" y="130" text-anchor="middle" font-size="52" opacity="0.7">📖</text>
+  <!-- Text placeholder lines -->
+  <rect x="40" y="155" width="120" height="6" fill="white" opacity="0.15" rx="3"/>
+  <rect x="55" y="170" width="90" height="4" fill="white" opacity="0.1" rx="2"/>
+  <rect x="65" y="183" width="70" height="4" fill="white" opacity="0.08" rx="2"/>
+  <!-- Label -->
+  <text x="100" y="220" text-anchor="middle" font-family="Georgia, serif" font-size="10" fill="white" opacity="0.35">Sin portada</text>
+</svg>

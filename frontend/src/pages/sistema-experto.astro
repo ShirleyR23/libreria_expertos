@@ -1,277 +1,393 @@
 ---
-// Página del Sistema Experto (solo admin y empleados)
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 
-// Verificar que sea empleado o admin
 const userStr = Astro.cookies.get('user')?.value;
 let user = null;
-try {
-  user = userStr ? JSON.parse(userStr) : null;
-} catch (e) {}
-
-if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) {
-  return Astro.redirect('/login');
-}
-
-const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-
-// Obtener datos del sistema experto
-let inventoryAlerts = { reposicion: [], compra_urgente: [], nuevos_bestsellers: [], resumen: {} };
-let promotionSuggestions = [];
-let salesAnalysis = {};
-
-try {
-  const [alertsRes, promoRes, analysisRes] = await Promise.all([
-    fetch(`${API_URL}/expert/inventory-alerts`, {
-      headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
-    }),
-    fetch(`${API_URL}/expert/promotion-suggestions`, {
-      headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
-    }),
-    fetch(`${API_URL}/expert/sales-analysis`, {
-      headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
-    })
-  ]);
-  
-  if (alertsRes.ok) inventoryAlerts = await alertsRes.json();
-  if (promoRes.ok) promotionSuggestions = await promoRes.json();
-  if (analysisRes.ok) salesAnalysis = await analysisRes.json();
-} catch (e) {
-  console.error('Error:', e);
-}
+try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
+if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) return Astro.redirect('/login');
 ---
 
 <DashboardLayout title="Sistema Experto" userRole={user.role_name}>
-  <div class="grid grid-3">
-    <div class="stat-card">
-      <div class="stat-value" style="color: #f59e0b;">{inventoryAlerts.resumen?.total_alertas_reposicion || 0}</div>
-      <div class="stat-label">Alertas de Reposición</div>
+
+  <!-- EXPLICACIÓN DEL MÓDULO -->
+  <div class="info-banner">
+    <div class="info-banner-icon">🤖</div>
+    <div>
+      <div class="info-banner-title">¿Para qué sirve el Sistema Experto?</div>
+      <div class="info-banner-desc">
+        Este módulo analiza automáticamente el inventario y las ventas para darte <strong>recomendaciones inteligentes</strong>:
+        detecta libros con stock crítico, identifica cuáles se venden rápido y necesitan reposición urgente,
+        sugiere descuentos para libros sin movimiento, y muestra los títulos más vendidos del período.
+      </div>
     </div>
-    <div class="stat-card">
-      <div class="stat-value" style="color: #ef4444;">{inventoryAlerts.resumen?.total_compras_urgentes || 0}</div>
-      <div class="stat-label">Compras Urgentes</div>
+    <button id="refreshBtn" class="btn btn-secondary btn-sm" style="flex-shrink:0">🔄 Actualizar</button>
+  </div>
+
+  <!-- STATS -->
+  <div class="grid grid-3" style="margin-bottom:1.5rem">
+    <div class="stat-card stat-warn">
+      <div class="stat-icon-big">⚠️</div>
+      <div class="stat-value" id="statReposicion" style="color:#d97706"><span class="skeleton sk-val"></span></div>
+      <div class="stat-label">Alertas de reposición</div>
+      <div class="stat-hint">Libros con stock bajo el mínimo</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-value" style="color: #22c55e;">{inventoryAlerts.resumen?.nuevos_bestsellers || 0}</div>
-      <div class="stat-label">Nuevos Bestsellers</div>
+    <div class="stat-card stat-danger">
+      <div class="stat-icon-big">🚨</div>
+      <div class="stat-value" id="statUrgente" style="color:#dc2626"><span class="skeleton sk-val"></span></div>
+      <div class="stat-label">Compras urgentes</div>
+      <div class="stat-hint">Alta demanda + poco stock</div>
+    </div>
+    <div class="stat-card stat-success">
+      <div class="stat-icon-big">⭐</div>
+      <div class="stat-value" id="statBestsellers" style="color:#16a34a"><span class="skeleton sk-val"></span></div>
+      <div class="stat-label">Nuevos bestsellers</div>
+      <div class="stat-hint">Detectados este período</div>
     </div>
   </div>
-  
-  <div class="grid grid-2 mt-4">
+
+  <div class="grid grid-2" style="margin-bottom:1.5rem">
+    <!-- ALERTAS DE INVENTARIO -->
     <div class="card">
-      <div class="card-header">
-        <h2 class="card-title">🚨 Alertas de Inventario</h2>
-      </div>
-      
-      <div class="alerts-section">
-        <h3>Stock Crítico ({inventoryAlerts.reposicion?.length || 0})</h3>
-        {inventoryAlerts.reposicion?.length > 0 ? (
-          <ul class="alert-list">
-            {inventoryAlerts.reposicion.map(item => (
-              <li class="alert-item alert-warning">
-                <strong>{item.nombre}</strong>
-                <span>Stock: {item.stock_actual} (mín: {item.stock_minimo})</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p class="empty">No hay alertas de stock crítico</p>
-        )}
-        
-        <h3>Compras Urgentes ({inventoryAlerts.compra_urgente?.length || 0})</h3>
-        {inventoryAlerts.compra_urgente?.length > 0 ? (
-          <ul class="alert-list">
-            {inventoryAlerts.compra_urgente.map(item => (
-              <li class="alert-item alert-danger">
-                <strong>{item.nombre}</strong>
-                <span>{item.ventas_30_dias} ventas/30días, Stock: {item.stock_actual}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p class="empty">No hay compras urgentes</p>
-        )}
+      <div class="card-header"><h2 class="card-title">🚨 Alertas de Inventario</h2></div>
+      <div id="alertasWrap">
+        <div class="skeleton-block"></div>
       </div>
     </div>
-    
+
+    <!-- ANÁLISIS DE VENTAS -->
     <div class="card">
-      <div class="card-header">
-        <h2 class="card-title">📊 Análisis de Ventas (30 días)</h2>
-      </div>
-      
-      <div class="analysis-section">
-        <div class="analysis-row">
-          <span>Ventas Totales:</span>
-          <strong>{salesAnalysis.ventas_totales || 0}</strong>
-        </div>
-        <div class="analysis-row">
-          <span>Ingresos Totales:</span>
-          <strong>L {(salesAnalysis.ingresos_totales || 0).toFixed(2)}</strong>
-        </div>
-        <div class="analysis-row">
-          <span>Promedio por Venta:</span>
-          <strong>L {(salesAnalysis.promedio_venta || 0).toFixed(2)}</strong>
-        </div>
-        
-        <h4>Top Libros Vendidos</h4>
-        {salesAnalysis.top_libros?.length > 0 ? (
-          <ul class="top-list">
-            {salesAnalysis.top_libros.map((libro, i) => (
-              <li>
-                <span>{i + 1}. {libro.nombre}</span>
-                <span class="count">{libro.vendidos} vendidos</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p class="empty">No hay datos disponibles</p>
-        )}
+      <div class="card-header"><h2 class="card-title">📊 Análisis de Ventas (30 días)</h2></div>
+      <div id="analysisWrap">
+        <div class="skeleton-block"></div>
       </div>
     </div>
   </div>
-  
-  <div class="card mt-4">
+
+  <!-- SUGERENCIAS DE PROMOCIÓN -->
+  <div class="card">
     <div class="card-header">
       <h2 class="card-title">🏷️ Sugerencias de Promoción</h2>
+      <span class="card-subtitle">Libros sin ventas recientes — considera ofrecer un descuento</span>
     </div>
-    
-    {promotionSuggestions.length > 0 ? (
-      <div class="promotions-grid">
-        {promotionSuggestions.map(book => (
-          <div class="promotion-card">
-            <h4>{book.nombre}</h4>
-            <p class="author">{book.autor}</p>
-            <div class="promo-info">
-              <span class="stock">Stock: {book.stock}</span>
-              <span class="days">
-                {book.dias_sin_venta === 'Nunca' ? 'Sin ventas' : `${book.dias_sin_venta} días sin ventas`}
-              </span>
-            </div>
-            <span class="suggestion">Sugerencia: {book.descuento_recomendado} de descuento</span>
-          </div>
-        ))}
-      </div>
-    ) : (
-      <p class="empty">No hay sugerencias de promoción en este momento</p>
-    )}
+    <div id="promoWrap">
+      <div class="skeleton-block"></div>
+    </div>
   </div>
+
+  <p class="last-updated" id="lastUpdated" style="text-align:right;margin-top:0.75rem;font-size:0.72rem;color:var(--gray-400)"></p>
+
+  <!-- RESTOCK MODAL -->
+  <div id="restockModal" class="exp-modal-overlay" style="display:none">
+    <div class="exp-modal-box">
+      <div class="exp-modal-header">
+        <h3 class="exp-modal-title">📦 Reponer Stock</h3>
+        <button onclick="document.getElementById('restockModal').style.display='none'" class="exp-modal-close">✕</button>
+      </div>
+      <div class="exp-modal-body">
+        <p id="restockBookName" style="font-weight:700;color:var(--navy);margin-bottom:0.5rem"></p>
+        <p id="restockCurrentStock" style="font-size:0.85rem;color:var(--gray-500);margin-bottom:1.25rem"></p>
+        <div class="form-group">
+          <label class="form-label">Cantidad a agregar</label>
+          <input type="number" id="restockQty" class="form-input" min="1" value="10" placeholder="Ej. 20">
+        </div>
+      </div>
+      <div class="exp-modal-footer">
+        <button onclick="document.getElementById('restockModal').style.display='none'" class="btn btn-secondary">Cancelar</button>
+        <button id="confirmRestockBtn" class="btn btn-primary">📦 Confirmar reposición</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DISCOUNT MODAL -->
+  <div id="discountModal" class="exp-modal-overlay" style="display:none">
+    <div class="exp-modal-box">
+      <div class="exp-modal-header">
+        <h3 class="exp-modal-title">🏷️ Aplicar Descuento</h3>
+        <button onclick="document.getElementById('discountModal').style.display='none'" class="exp-modal-close">✕</button>
+      </div>
+      <div class="exp-modal-body">
+        <p id="discountBookName" style="font-weight:700;color:var(--navy);margin-bottom:0.5rem"></p>
+        <p id="discountCurrentPrice" style="font-size:0.85rem;color:var(--gray-500);margin-bottom:1.25rem"></p>
+        <div class="form-group">
+          <label class="form-label">Porcentaje de descuento (%)</label>
+          <input type="number" id="discountPct" class="form-input" min="1" max="90" value="15" placeholder="Ej. 20">
+        </div>
+        <div id="discountPreview" class="discount-preview"></div>
+      </div>
+      <div class="exp-modal-footer">
+        <button onclick="document.getElementById('discountModal').style.display='none'" class="btn btn-secondary">Cancelar</button>
+        <button id="confirmDiscountBtn" class="btn btn-primary">🏷️ Aplicar descuento</button>
+      </div>
+    </div>
+  </div>
+
 </DashboardLayout>
 
-<style>
-  .mt-4 {
-    margin-top: 1.5rem;
+<script is:inline>
+  const API = 'http://localhost:8000/api/v1';
+  const token = localStorage.getItem('token');
+
+  async function loadExpert() {
+    try {
+      const [alertsRes, promoRes, analysisRes] = await Promise.all([
+        fetch(`${API}/expert/inventory-alerts`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API}/expert/promotion-suggestions`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API}/expert/sales-analysis`, { headers: { 'Authorization': `Bearer ${token}` } })
+      ]);
+
+      // ── ALERTS ──────────────────────────────────────────────
+      if (alertsRes.ok) {
+        const alerts = await alertsRes.json();
+        const r = alerts.resumen || {};
+        document.getElementById('statReposicion').textContent = r.total_alertas_reposicion ?? 0;
+        document.getElementById('statUrgente').textContent = r.total_compras_urgentes ?? 0;
+        document.getElementById('statBestsellers').textContent = r.nuevos_bestsellers ?? 0;
+
+        let html = '';
+        if ((alerts.reposicion || []).length > 0) {
+          html += `<div class="alert-section-title">📦 Stock Crítico (${alerts.reposicion.length})</div>`;
+          html += alerts.reposicion.map(item => `
+            <div class="alert-item alert-warning">
+              <div><strong>${item.nombre}</strong><br><small style="color:#92400e">Stock actual: <strong>${item.stock_actual}</strong> | Mínimo: ${item.stock_minimo}</small></div>
+              <button class="btn-action-restock" onclick="openRestockModal(${item.id}, '${item.nombre.replace(/'/g,"\'")}', ${item.stock_actual})">📦 Reponer stock</button>
+            </div>`).join('');
+        }
+        if ((alerts.compra_urgente || []).length > 0) {
+          html += `<div class="alert-section-title" style="margin-top:1rem">🚨 Compra Urgente (${alerts.compra_urgente.length})</div>`;
+          html += alerts.compra_urgente.map(item => `
+            <div class="alert-item alert-danger">
+              <div><strong>${item.nombre}</strong><br><small style="color:#991b1b">${item.ventas_30_dias} ventas/mes | Stock: ${item.stock_actual}</small></div>
+              <button class="btn-action-urgent" onclick="openRestockModal(${item.id}, '${item.nombre.replace(/'/g,"\'")}', ${item.stock_actual})">🚨 Reponer urgente</button>
+            </div>`).join('');
+        }
+        if (!html) html = '<p class="empty-msg">✅ Sin alertas de inventario por ahora</p>';
+        document.getElementById('alertasWrap').innerHTML = html;
+      }
+
+      // ── SALES ANALYSIS ───────────────────────────────────────
+      if (analysisRes.ok) {
+        const a = await analysisRes.json();
+        let html = `
+          <div class="analysis-row"><span>Ventas totales</span><strong>${a.ventas_totales ?? 0}</strong></div>
+          <div class="analysis-row"><span>Ingresos totales</span><strong>L ${Number(a.ingresos_totales ?? 0).toFixed(2)}</strong></div>
+          <div class="analysis-row"><span>Promedio por venta</span><strong>L ${Number(a.promedio_venta ?? 0).toFixed(2)}</strong></div>`;
+        if (a.top_libros?.length > 0) {
+          html += `<div class="analysis-section-title">🏆 Top libros vendidos</div>`;
+          html += a.top_libros.map((l, i) => `
+            <div class="top-item">
+              <span><strong class="top-rank">${i+1}</strong> ${l.nombre}</span>
+              <span class="badge badge-info">${l.vendidos} vendidos</span>
+            </div>`).join('');
+        } else {
+          html += '<p class="empty-msg">Sin datos de ventas en este período</p>';
+        }
+        document.getElementById('analysisWrap').innerHTML = html;
+      }
+
+      // ── PROMOTIONS ───────────────────────────────────────────
+      if (promoRes.ok) {
+        const promos = await promoRes.json();
+        if (!promos.length) {
+          document.getElementById('promoWrap').innerHTML = '<p class="empty-msg">✅ No hay sugerencias de promoción en este momento</p>';
+        } else {
+          document.getElementById('promoWrap').innerHTML = `<div class="promos-grid">
+            ${promos.map(b => `
+              <div class="promo-card ${b.tiene_descuento ? 'promo-card-discounted' : ''}">
+                <div class="promo-name">${b.nombre}</div>
+                <div class="promo-author">${b.autor}</div>
+                <div class="promo-meta">
+                  <span>Stock: ${b.stock}</span>
+                  <span>${b.dias_sin_venta === 'Nunca' ? 'Sin ventas' : `${b.dias_sin_venta} días sin ventas`}</span>
+                </div>
+                <div class="promo-price-row">
+                  ${b.tiene_descuento
+                    ? (() => {
+                        const pct = Math.round((1 - b.precio / b.precio_original) * 100);
+                        return `<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                          <span class="promo-price-original">L ${b.precio_original.toFixed(2)}</span>
+                          <span class="promo-price-new">L ${b.precio.toFixed(2)}</span>
+                          <span class="promo-discount-pct">-${pct}%</span>
+                        </div>`;
+                      })()
+                    : `<span class="promo-price-current">L ${(b.precio || 0).toFixed(2)}</span>`
+                  }
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap">
+                  <div class="promo-suggestion">💡 Sugerido: ${b.descuento_recomendado}</div>
+                  <div style="display:flex;gap:0.4rem">
+                    <button class="btn-action-promo" onclick="openDiscountModal(${b.id}, '${b.nombre.replace(/'/g,"\'")}', ${b.tiene_descuento ? b.precio_original : b.precio})">🏷️ ${b.tiene_descuento ? 'Cambiar' : 'Aplicar'}</button>
+                    ${b.tiene_descuento ? `<button class="btn-action-remove" onclick="removeDiscount(${b.id}, '${b.nombre.replace(/'/g,"\'")}')">✕ Quitar</button>` : ''}
+                  </div>
+                </div>
+              </div>`).join('')}
+          </div>`;
+        }
+      }
+
+      document.getElementById('lastUpdated').textContent = 'Actualizado: ' + new Date().toLocaleTimeString('es-HN');
+    } catch(e) {
+      console.error('Sistema experto error:', e);
+    }
   }
-  
-  .alerts-section h3 {
-    margin: 1rem 0 0.5rem;
-    font-size: 1rem;
-    color: #64748b;
+
+  // ── REMOVE DISCOUNT ──────────────────────────────────────────
+  window.removeDiscount = async function(bookId, nombre) {
+    if (!confirm('¿Quitar el descuento de "' + nombre + '" y restaurar el precio original?')) return;
+    try {
+      const r = await fetch(`${API}/expert/remove-discount/${bookId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || 'Error');
+      Modal.success('Precio restaurado', d.message, () => loadExpert());
+    } catch(e) {
+      Modal.error('Error', e.message);
+    }
+  };
+
+  document.getElementById('refreshBtn')?.addEventListener('click', loadExpert);
+  loadExpert();
+  setInterval(loadExpert, 60000);
+
+  // ── RESTOCK MODAL ─────────────────────────────────────────────
+  let restockBookId = null;
+  window.openRestockModal = function(id, nombre, stockActual) {
+    restockBookId = id;
+    document.getElementById('restockBookName').textContent = nombre;
+    document.getElementById('restockCurrentStock').textContent = 'Stock actual: ' + stockActual + ' unidades';
+    document.getElementById('restockQty').value = 10;
+    document.getElementById('restockModal').style.display = 'flex';
+  };
+  document.getElementById('confirmRestockBtn')?.addEventListener('click', async () => {
+    if (!restockBookId) return;
+    const qty = parseInt(document.getElementById('restockQty').value);
+    if (!qty || qty < 1) { Modal.warning('Cantidad inválida', 'Ingresa una cantidad mayor a 0'); return; }
+    const btn = document.getElementById('confirmRestockBtn');
+    btn.disabled = true; btn.textContent = 'Procesando…';
+    try {
+      const r = await fetch(`${API}/expert/restock/${restockBookId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ cantidad: qty })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || 'Error');
+      document.getElementById('restockModal').style.display = 'none';
+      Modal.success('¡Stock actualizado!', d.message, () => loadExpert());
+    } catch(e) {
+      Modal.error('Error', e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '📦 Confirmar reposición';
+    }
+  });
+
+  // ── DISCOUNT MODAL ────────────────────────────────────────────
+  let discountBookId = null, discountBookPrice = 0;
+  window.openDiscountModal = function(id, nombre, precio) {
+    discountBookId = id;
+    discountBookPrice = precio;
+    document.getElementById('discountBookName').textContent = nombre;
+    document.getElementById('discountCurrentPrice').textContent = 'Precio actual: L ' + precio.toFixed(2);
+    document.getElementById('discountPct').value = 15;
+    updateDiscountPreview();
+    document.getElementById('discountModal').style.display = 'flex';
+  };
+  function updateDiscountPreview() {
+    const pct = parseFloat(document.getElementById('discountPct').value) || 0;
+    const nuevo = discountBookPrice * (1 - pct / 100);
+    document.getElementById('discountPreview').textContent = pct > 0
+      ? `Precio nuevo: L ${nuevo.toFixed(2)} (ahorras L ${(discountBookPrice - nuevo).toFixed(2)})`
+      : '';
   }
-  
-  .alert-list {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 1.5rem;
-  }
-  
-  .alert-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.75rem;
-    border-radius: 6px;
-    margin-bottom: 0.5rem;
-  }
-  
-  .alert-item.alert-warning {
-    background: #fef3c7;
-    color: #92400e;
-  }
-  
-  .alert-item.alert-danger {
-    background: #fee2e2;
-    color: #991b1b;
-  }
-  
-  .analysis-section {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-  
-  .analysis-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.75rem;
-    background: #f8fafc;
-    border-radius: 6px;
-  }
-  
-  .analysis-section h4 {
-    margin-top: 1rem;
-    font-size: 0.875rem;
-    color: #64748b;
-    text-transform: uppercase;
-  }
-  
-  .top-list {
-    list-style: none;
-    padding: 0;
-  }
-  
-  .top-list li {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  
-  .top-list .count {
-    color: #64748b;
-    font-size: 0.875rem;
-  }
-  
-  .promotions-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1rem;
-  }
-  
-  .promotion-card {
-    padding: 1rem;
-    background: #f8fafc;
-    border-radius: 8px;
-    border-left: 4px solid #f59e0b;
-  }
-  
-  .promotion-card h4 {
-    margin-bottom: 0.25rem;
-  }
-  
-  .promotion-card .author {
-    color: #64748b;
-    font-size: 0.875rem;
-    margin-bottom: 0.5rem;
-  }
-  
-  .promo-info {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 0.5rem;
-    font-size: 0.875rem;
-  }
-  
-  .promotion-card .suggestion {
-    display: inline-block;
-    background: #fef3c7;
-    color: #92400e;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.75rem;
-  }
-  
-  .empty {
-    color: #64748b;
-    text-align: center;
-    padding: 1rem;
-  }
+  document.getElementById('discountPct')?.addEventListener('input', updateDiscountPreview);
+  document.getElementById('confirmDiscountBtn')?.addEventListener('click', async () => {
+    if (!discountBookId) return;
+    const pct = parseFloat(document.getElementById('discountPct').value);
+    if (!pct || pct < 1 || pct > 90) { Modal.warning('Porcentaje inválido', 'Ingresa un valor entre 1 y 90'); return; }
+    const btn = document.getElementById('confirmDiscountBtn');
+    btn.disabled = true; btn.textContent = 'Aplicando…';
+    try {
+      const r = await fetch(`${API}/expert/apply-discount/${discountBookId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ porcentaje: pct })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || 'Error');
+      document.getElementById('discountModal').style.display = 'none';
+      Modal.success('¡Descuento aplicado!', `${d.message}<br>Precio nuevo: <strong>L ${d.precio_nuevo.toFixed(2)}</strong>`, () => loadExpert());
+    } catch(e) {
+      Modal.error('Error', e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '🏷️ Aplicar descuento';
+    }
+  });
+</script>
+
+<style is:global>
+  /* INFO BANNER */
+  .info-banner { display:flex; align-items:flex-start; gap:1rem; background:linear-gradient(135deg,#eff6ff,#f0fdf4); border:1.5px solid #bfdbfe; border-radius:var(--radius); padding:1.25rem 1.5rem; margin-bottom:1.5rem; }
+  .info-banner-icon { font-size:2rem; flex-shrink:0; }
+  .info-banner-title { font-weight:700; font-size:0.95rem; color:var(--navy); margin-bottom:0.35rem; }
+  .info-banner-desc { font-size:0.85rem; color:var(--gray-600); line-height:1.5; }
+
+  /* STATS */
+  .stat-card { background:white; border-radius:var(--radius); padding:1.25rem 1.5rem; box-shadow:var(--shadow-sm); border:1px solid var(--gray-200); }
+  .stat-icon-big { font-size:1.5rem; margin-bottom:0.5rem; }
+  .stat-value { font-family:var(--font-display); font-size:2rem; font-weight:700; min-height:2.4rem; }
+  .stat-label { font-weight:600; font-size:0.85rem; color:var(--gray-600); margin-top:2px; }
+  .stat-hint { font-size:0.75rem; color:var(--gray-400); margin-top:2px; }
+  .sk-val { display:inline-block; width:60px; height:32px; border-radius:6px; }
+  .skeleton-block { height:120px; border-radius:var(--radius-sm); }
+
+  /* ALERTS */
+  .alert-section-title { font-size:0.8rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--gray-600); margin-bottom:0.5rem; }
+  .alert-item { display:flex; justify-content:space-between; align-items:center; padding:0.75rem; border-radius:var(--radius-sm); margin-bottom:0.5rem; gap:1rem; }
+  .alert-item.alert-warning { background:#fef3c7; }
+  .alert-item.alert-danger { background:#fee2e2; }
+
+  /* ANALYSIS */
+  .analysis-row { display:flex; justify-content:space-between; padding:0.75rem 1rem; background:var(--gray-50); border-radius:var(--radius-sm); margin-bottom:0.5rem; font-size:0.9rem; }
+  .analysis-section-title { font-size:0.78rem; font-weight:700; text-transform:uppercase; color:var(--gray-400); letter-spacing:0.06em; margin:1rem 0 0.5rem; }
+  .top-item { display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0; border-bottom:1px solid var(--gray-100); font-size:0.875rem; }
+  .top-item:last-child { border-bottom:none; }
+  .top-rank { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; background:var(--blue-pale); color:var(--blue-mid); border-radius:50%; font-size:0.75rem; margin-right:0.5rem; }
+
+  /* PROMOTIONS */
+  .promos-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem; }
+  .promo-card { padding:1rem 1.25rem; background:var(--gray-50); border-radius:var(--radius-sm); border-left:4px solid #f59e0b; }
+  .promo-name { font-weight:700; font-size:0.9rem; color:var(--navy); margin-bottom:2px; }
+  .promo-author { font-size:0.8rem; color:var(--gray-400); margin-bottom:0.5rem; }
+  .promo-meta { display:flex; gap:1rem; font-size:0.78rem; color:var(--gray-600); margin-bottom:0.5rem; }
+  .promo-suggestion { display:inline-block; background:#fef3c7; color:#92400e; padding:3px 8px; border-radius:4px; font-size:0.75rem; font-weight:600; }
+
+  .card-subtitle { font-size:0.78rem; color:var(--gray-400); }
+  .empty-msg { color:var(--gray-400); text-align:center; padding:1.5rem; font-size:0.9rem; }
+
+  /* ACTION BUTTONS */
+  .btn-action-restock { background:#fef3c7; color:#92400e; border:1.5px solid #f59e0b; border-radius:6px; padding:4px 10px; font-size:0.75rem; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0; }
+  .btn-action-restock:hover { background:#f59e0b; color:white; }
+  .btn-action-urgent { background:#fee2e2; color:#991b1b; border:1.5px solid #ef4444; border-radius:6px; padding:4px 10px; font-size:0.75rem; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0; }
+  .btn-action-urgent:hover { background:#ef4444; color:white; }
+  .btn-action-promo { background:#eff6ff; color:#1d4ed8; border:1.5px solid #2563eb; border-radius:6px; padding:4px 10px; font-size:0.75rem; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.15s; }
+  .btn-action-promo:hover { background:#2563eb; color:white; }
+
+  /* MODALS */
+  .exp-modal-overlay { position:fixed; inset:0; background:rgba(13,27,46,0.65); backdrop-filter:blur(4px); z-index:9000; display:flex; align-items:center; justify-content:center; padding:1rem; }
+  .exp-modal-box { background:white; border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); width:100%; max-width:400px; }
+  .exp-modal-header { display:flex; justify-content:space-between; align-items:center; padding:1.25rem 1.5rem 0.875rem; border-bottom:1px solid var(--gray-100); }
+  .exp-modal-title { font-family:var(--font-display); font-size:1.1rem; font-weight:700; color:var(--navy); }
+  .exp-modal-close { background:var(--gray-100); border:none; width:28px; height:28px; border-radius:50%; cursor:pointer; font-size:0.8rem; }
+  .exp-modal-body { padding:1.25rem 1.5rem; }
+  .exp-modal-footer { padding:0.875rem 1.5rem 1.25rem; display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid var(--gray-100); }
+  .discount-preview { background:var(--blue-ghost); border:1.5px solid var(--blue-pale); border-radius:var(--radius-sm); padding:0.625rem 0.875rem; font-size:0.85rem; font-weight:600; color:var(--blue-mid); margin-top:0.75rem; min-height:38px; }
+  .promo-card-discounted { border-left-color:#2563eb; background:linear-gradient(to right,#eff6ff,#f9fafb); }
+  .promo-price-row { margin:0.4rem 0; }
+  .promo-price-original { font-size:0.8rem; color:var(--gray-400); text-decoration:line-through; margin-right:0.3rem; }
+  .promo-price-new { font-size:0.9rem; font-weight:700; color:#16a34a; }
+  .promo-price-current { font-size:0.85rem; color:var(--gray-600); font-weight:600; }
+  .btn-action-remove { background:#fee2e2; color:#991b1b; border:1.5px solid #ef4444; border-radius:6px; padding:4px 10px; font-size:0.75rem; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.15s; }
+  .btn-action-remove:hover { background:#ef4444; color:white; }
+  .promo-discount-pct { background:linear-gradient(135deg,#dc2626,#991b1b); color:white; padding:2px 8px; border-radius:999px; font-size:0.7rem; font-weight:800; letter-spacing:0.02em; }
 </style>

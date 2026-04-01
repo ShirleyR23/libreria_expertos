@@ -1,343 +1,112 @@
 ---
-// Dashboard de Administrador
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 
-// Verificar que sea admin
 const userStr = Astro.cookies.get('user')?.value;
 let user = null;
-try {
-  user = userStr ? JSON.parse(userStr) : null;
-} catch (e) {}
-
-if (!user || user.role_name !== 'ADMIN') {
-  return Astro.redirect('/login');
-}
-
-// Obtener estadísticas
-const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-let stats = {
-  total_libros: 0,
-  stock_bajo: 0,
-  total_ventas: 0,
-  ingresos_totales: 0,
-  total_clientes: 0,
-  total_empleados: 0
-};
-
-try {
-  const response = await fetch(`${API_URL}/admin/dashboard-stats`, {
-    headers: {
-      'Authorization': `Bearer ${Astro.cookies.get('token')?.value}`
-    }
-  });
-  if (response.ok) {
-    stats = await response.json();
-  }
-} catch (e) {
-  console.error('Error al cargar estadísticas:', e);
-}
+try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
+if (!user || user.role_name !== 'ADMIN') return Astro.redirect('/login');
 ---
-
-<DashboardLayout title="Dashboard Administrador" userRole="ADMIN">
-  <div class="grid grid-4">
-    <div class="stat-card blue">
-    <div class="stat-icon">📘</div>
-      <div class="stat-value">{stats.total_libros}</div>
-      <div class="stat-label">Total Libros</div>
+<DashboardLayout title="Dashboard" userRole="ADMIN">
+  <div class="dash-stats grid grid-4">
+    <div class="stat-card stat-blue">
+      <div class="stat-icon-wrap">📚</div>
+      <div class="stat-value" id="statLibros"><span class="skeleton sk-val"></span></div>
+      <div class="stat-label">Total libros</div>
     </div>
-    <div class="stat-card orange">
-    <div class="stat-icon">⚠️</div>
-      <div class="stat-value" style="color: #f59e0b;">{stats.stock_bajo}</div>
-      <div class="stat-label">Stock Bajo</div>
+    <div class="stat-card stat-orange">
+      <div class="stat-icon-wrap">⚠️</div>
+      <div class="stat-value" id="statStock"><span class="skeleton sk-val"></span></div>
+      <div class="stat-label">Stock bajo</div>
     </div>
-    <div class="stat-card green">
-    <div class="stat-icon">🛒</div>
-      <div class="stat-value" style="color: #22c55e;">{stats.total_ventas}</div>
-      <div class="stat-label">Ventas Totales</div>
+    <div class="stat-card stat-green">
+      <div class="stat-icon-wrap">💰</div>
+      <div class="stat-value" id="statVentas"><span class="skeleton sk-val"></span></div>
+      <div class="stat-label">Ventas totales</div>
     </div>
-    <div class="stat-card purple">
-    <div class="stat-icon">💰</div>
-      <div class="stat-value" style="color: #8b5cf6;"> {stats.ingresos_totales.toFixed(2)} LPS </div>
-      <div class="stat-label">Ingresos Totales</div>
+    <div class="stat-card stat-purple">
+      <div class="stat-icon-wrap">📈</div>
+      <div class="stat-value stat-sm" id="statIngresos"><span class="skeleton sk-val"></span></div>
+      <div class="stat-label">Ingresos</div>
     </div>
   </div>
-  
-  <div class="grid grid-2 mt-4">
+
+  <div class="grid grid-2" style="margin-top:1.5rem">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Accesos rápidos</h2></div>
+      <div class="quick-grid">
+        <a href="/inventario" class="quick-item"><span class="quick-icon">📚</span><span class="quick-label">Inventario</span></a>
+        <a href="/ventas" class="quick-item"><span class="quick-icon">💰</span><span class="quick-label">Ventas</span></a>
+        <a href="/compras" class="quick-item"><span class="quick-icon">📦</span><span class="quick-label">Compras</span></a>
+        <a href="/empleados" class="quick-item"><span class="quick-icon">👥</span><span class="quick-label">Empleados</span></a>
+        <a href="/sistema-experto" class="quick-item"><span class="quick-icon">🤖</span><span class="quick-label">Sistema Experto</span></a>
+        <a href="/catalogo-admin" class="quick-item"><span class="quick-icon">🏪</span><span class="quick-label">Ver Catálogo</span></a>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header">
-        <h2 class="card-title">Accesos Rápidos</h2>
+        <h2 class="card-title">Resumen del sistema</h2>
+        <button id="refreshBtn" class="btn btn-secondary btn-sm">🔄 Actualizar</button>
       </div>
-      <div class="quick-links">
-  <a href="/inventario" class="quick-link">
-    <div class="quick-link-left">
-      <div class="quick-icon blue">📚</div>
-      <span>Gestionar Inventario</span>
-    </div>
-    <span class="quick-arrow">›</span>
-  </a>
-
-  <a href="/empleados" class="quick-link">
-    <div class="quick-link-left">
-      <div class="quick-icon green">👥</div>
-      <span>Gestionar Empleados</span>
-    </div>
-    <span class="quick-arrow">›</span>
-  </a>
-
-  <a href="/sistema-experto" class="quick-link">
-    <div class="quick-link-left">
-      <div class="quick-icon purple">📊</div>
-      <span>Estadísticas</span>
-    </div>
-    <span class="quick-arrow">›</span>
-  </a>
-</div>
-</div>
-    
-    <div class="card">
-      <div class="card-header">
-        <h2 class="card-title">Información del Sistema</h2>
+      <div class="info-list">
+        <div class="info-row"><span class="info-key">👥 Clientes registrados</span><strong class="info-val" id="infoClientes">—</strong></div>
+        <div class="info-row"><span class="info-key">🧑‍💼 Empleados activos</span><strong class="info-val" id="infoEmpleados">—</strong></div>
+        <div class="info-row"><span class="info-key">📊 Total ventas</span><strong class="info-val" id="infoVentas2">—</strong></div>
+        <div class="info-row"><span class="info-key">💵 Ingresos totales</span><strong class="info-val" id="infoIngresos2">—</strong></div>
+        <div class="info-row"><span class="info-key">⚠️ Stock bajo</span><strong class="info-val" id="infoStock2" style="color:var(--warning)">—</strong></div>
       </div>
-      <div class="system-info">
-        <div class="info-row">
-          <span>Total Clientes</span>
-          <strong>{stats.total_clientes}</strong>
-        </div>
-        <div class="info-row">
-          <span>Total Empleados</span>
-          <strong>{stats.total_empleados}</strong>
-        </div>
-        <div class="info-row">
-          <span>Estado</span>
-          <span class="badge badge-success">Operativo</span>
-        </div>
-      </div>
+      <p class="last-updated" id="lastUpdated"></p>
     </div>
   </div>
 </DashboardLayout>
 
+<script is:inline>
+  const API = 'http://localhost:8000/api/v1';
+  const token = localStorage.getItem('token');
+
+  async function loadStats() {
+    try {
+      const r = await fetch(`${API}/admin/dashboard-stats`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!r.ok) return;
+      const s = await r.json();
+      document.getElementById('statLibros').textContent = s.total_libros ?? 0;
+      document.getElementById('statStock').textContent = s.stock_bajo ?? 0;
+      document.getElementById('statVentas').textContent = s.total_ventas ?? 0;
+      document.getElementById('statIngresos').textContent = 'L ' + Number(s.ingresos_totales ?? 0).toFixed(2);
+      document.getElementById('infoClientes').textContent = s.total_clientes ?? 0;
+      document.getElementById('infoEmpleados').textContent = s.total_empleados ?? 0;
+      document.getElementById('infoVentas2').textContent = s.total_ventas ?? 0;
+      document.getElementById('infoIngresos2').textContent = 'L ' + Number(s.ingresos_totales ?? 0).toFixed(2);
+      document.getElementById('infoStock2').textContent = s.stock_bajo ?? 0;
+      document.getElementById('lastUpdated').textContent = 'Actualizado: ' + new Date().toLocaleTimeString('es-HN');
+    } catch(e) { console.error('Stats error:', e); }
+  }
+
+  document.getElementById('refreshBtn')?.addEventListener('click', loadStats);
+  loadStats();
+  setInterval(loadStats, 30000);
+</script>
+
 <style>
-  /* ====== FONDO GENERAL ====== */
-body {
-  background: #f1f5f9;
-  font-family: 'Inter', sans-serif;
-  color: #1e293b;
-}
-
-/* ====== GRID ====== */
-.grid {
-  display: grid;
-  gap: 1.5rem;
-}
-
-.grid-4 {
-  grid-template-columns: repeat(4, 1fr);
-}
-
-.grid-2 {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-.mt-4 {
-  margin-top: 2rem;
-}
-
-/* ====== TARJETAS GENERALES ====== */
-.card {
-  background: white;
-  border-radius: 18px;
-  padding: 1.5rem;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.06);
-  transition: all 0.25s ease;
-}
-
-.card:hover {
-  transform: translateY(-4px);
-}
-
-/* ====== KPI CARDS ====== */
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  background: white;
-  padding: 1.2rem 1.5rem;
-  border-radius: 18px;
-  box-shadow: 0 8px 25px rgba(0,0,0,0.05);
-  transition: all 0.25s ease;
-}
-
-.stat-card:hover {
-  transform: translateY(-5px);
-}
-
-/* ICONO */
-.stat-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.4rem;
-}
-
-/* COLORES */
-.blue .stat-icon {
-  background: #dbeafe;
-  color: #3b82f6;
-}
-
-.orange .stat-icon {
-  background: #ffedd5;
-  color: #f59e0b;
-}
-
-.green .stat-icon {
-  background: #dcfce7;
-  color: #22c55e;
-}
-
-.purple .stat-icon {
-  background: #ede9fe;
-  color: #8b5cf6;
-}
-
-/* TEXTO KPI */
-.stat-value {
-  font-size: 1.8rem;
-  font-weight: 700;
-}
-
-.stat-label {
-  font-size: 0.85rem;
-  color: #64748b;
-}
-
-/* ====== HEADER DE TARJETAS ====== */
-.card-header {
-  margin-bottom: 1rem;
-}
-
-.card-title {
-  font-size: 1.2rem;
-  font-weight: 600;
-}
-
-/* ====== QUICK LINKS ====== */
-.quick-links {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.quick-link {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.2rem;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
-  text-decoration: none;
-  color: #1e293b;
-  font-weight: 500;
-  transition: all 0.25s ease;
-}
-
-.quick-link:hover {
-  transform: translateY(-3px) scale(1.01);
-  background: linear-gradient(135deg, #e2e8f0, #cbd5f5);
-}
-
-/* CONTENIDO LINK */
-.quick-link-left {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.quick-icon {
-  width: 45px;
-  height: 45px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.3rem;
-}
-
-/* COLORES ICONOS */
-.quick-icon.blue {
-  background: #dbeafe;
-  color: #3b82f6;
-}
-
-.quick-icon.green {
-  background: #dcfce7;
-  color: #22c55e;
-}
-
-.quick-icon.purple {
-  background: #ede9fe;
-  color: #8b5cf6;
-}
-
-/* FLECHA */
-.quick-arrow {
-  font-size: 1.2rem;
-  opacity: 0.6;
-}
-
-/* ====== SYSTEM INFO ====== */
-.system-info {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.7rem 0;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.info-row:last-child {
-  border-bottom: none;
-}
-
-.info-row strong {
-  font-size: 1.1rem;
-}
-
-/* ====== BADGE ====== */
-.badge {
-  padding: 0.3rem 0.7rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  font-weight: 500;
-}
-
-.badge-success {
-  background: #dcfce7;
-  color: #166534;
-}
-
-/* ====== RESPONSIVE ====== */
-@media (max-width: 1024px) {
-  .grid-4 {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .grid-2 {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 600px) {
-  .grid-4 {
-    grid-template-columns: 1fr;
-  }
-}
-  
+  .dash-stats .stat-card { display:flex; flex-direction:column; gap:0.5rem; padding:1.5rem; position:relative; overflow:hidden; }
+  .stat-blue { border-top:3px solid var(--blue-mid); } .stat-blue .stat-value { color:var(--blue-mid); }
+  .stat-orange { border-top:3px solid var(--warning); } .stat-orange .stat-value { color:var(--warning); }
+  .stat-green { border-top:3px solid var(--success); } .stat-green .stat-value { color:var(--success); }
+  .stat-purple { border-top:3px solid #7c3aed; } .stat-purple .stat-value { color:#7c3aed; }
+  .stat-icon-wrap { font-size:1.5rem; }
+  .stat-value { font-family:var(--font-display); font-size:2rem; font-weight:700; min-height:2.4rem; }
+  .stat-value.stat-sm { font-size:1.5rem; }
+  .stat-label { font-size:0.85rem; color:var(--gray-400); font-weight:500; }
+  .sk-val { display:inline-block; width:60px; height:32px; border-radius:6px; }
+  .quick-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:0.75rem; }
+  .quick-item { display:flex; flex-direction:column; align-items:center; gap:0.5rem; padding:1rem; background:var(--gray-50); border-radius:var(--radius-sm); text-decoration:none; border:1.5px solid var(--gray-200); transition:all 0.2s; }
+  .quick-item:hover { border-color:var(--blue-mid); background:var(--blue-ghost); transform:translateY(-2px); }
+  .quick-icon { font-size:1.5rem; }
+  .quick-label { font-size:0.78rem; font-weight:600; color:var(--gray-600); text-align:center; }
+  .info-list { display:flex; flex-direction:column; }
+  .info-row { display:flex; justify-content:space-between; align-items:center; padding:0.75rem 0; border-bottom:1px solid var(--gray-100); }
+  .info-row:last-child { border-bottom:none; }
+  .info-key { font-size:0.875rem; color:var(--gray-600); }
+  .info-val { font-size:0.95rem; color:var(--navy); }
+  .last-updated { font-size:0.72rem; color:var(--gray-400); text-align:right; margin-top:0.5rem; }
 </style>

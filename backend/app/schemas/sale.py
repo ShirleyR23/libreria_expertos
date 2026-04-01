@@ -50,6 +50,7 @@ class SaleResponse(BaseModel):
     descuento: Decimal
     total: Decimal
     notas: Optional[str] = None
+    invoice: Optional["InvoiceResponse"] = None
     created_at: datetime
     updated_at: datetime
 

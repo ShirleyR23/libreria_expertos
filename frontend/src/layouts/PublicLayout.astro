@@ -1,9 +1,7 @@
 ---
-// Layout para páginas públicas (login, register, catálogo)
 interface Props {
   title: string;
 }
-
 const { title } = Astro.props;
 ---
 
@@ -12,157 +10,129 @@ const { title } = Astro.props;
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Sistema de Gestión para Librería">
   <title>{title} | Librería</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style is:global>
     :root {
-      --primary: #3b82f6;
-      --primary-dark: #2563eb;
-      --secondary: #64748b;
-      --success: #22c55e;
-      --warning: #f59e0b;
-      --danger: #ef4444;
-      --dark: #1e293b;
-      --light: #f8fafc;
-      --gray: #e2e8f0;
-      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      --radius: 8px;
+      --navy: #0d1b2e;
+      --blue-dark: #1a3560;
+      --blue: #1d4ed8;
+      --blue-mid: #2563eb;
+      --blue-light: #3b82f6;
+      --blue-pale: #dbeafe;
+      --blue-ghost: #eff6ff;
+      --beige: #c8a97e;
+      --beige-light: #f5ede1;
+      --beige-pale: #fdf8f3;
+      --white: #ffffff;
+      --gray-50: #f8fafc;
+      --gray-100: #f1f5f9;
+      --gray-200: #e2e8f0;
+      --gray-400: #94a3b8;
+      --gray-600: #475569;
+      --gray-800: #1e293b;
+      --success: #16a34a;
+      --warning: #d97706;
+      --danger: #dc2626;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+      --shadow: 0 4px 16px rgba(13,27,46,0.10);
+      --shadow-lg: 0 12px 40px rgba(13,27,46,0.16);
+      --radius-sm: 6px;
+      --radius: 12px;
+      --radius-lg: 20px;
+      --font-display: 'Playfair Display', Georgia, serif;
+      --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
     }
-    
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      color: var(--dark);
-    }
-    
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 1rem;
-    }
-    
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      padding: 0.75rem 1.5rem;
-      border: none;
-      border-radius: var(--radius);
-      font-size: 1rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-      text-decoration: none;
-    }
-    
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-    }
-    
-    .btn-primary:hover {
-      background: var(--primary-dark);
-    }
-    
-    .btn-secondary {
-      background: var(--secondary);
-      color: white;
-    }
-    
-    .btn-success {
-      background: var(--success);
-      color: white;
-    }
-    
-    .btn-danger {
-      background: var(--danger);
-      color: white;
-    }
-    
-    .btn-outline {
-      background: transparent;
-      border: 2px solid var(--primary);
-      color: var(--primary);
-    }
-    
-    .btn-outline:hover {
-      background: var(--primary);
-      color: white;
-    }
-    
-    .card {
-      background: white;
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: 1.5rem;
-    }
-    
-    .form-group {
-      margin-bottom: 1rem;
-    }
-    
-    .form-label {
-      display: block;
-      margin-bottom: 0.5rem;
-      font-weight: 500;
-      color: var(--dark);
-    }
-    
-    .form-input {
-      width: 100%;
-      padding: 0.75rem;
-      border: 2px solid var(--gray);
-      border-radius: var(--radius);
-      font-size: 1rem;
-      transition: border-color 0.2s;
-    }
-    
-    .form-input:focus {
-      outline: none;
-      border-color: var(--primary);
-    }
-    
-    .alert {
-      padding: 1rem;
-      border-radius: var(--radius);
-      margin-bottom: 1rem;
-    }
-    
-    .alert-error {
-      background: #fee2e2;
-      color: #991b1b;
-      border: 1px solid #fecaca;
-    }
-    
-    .alert-success {
-      background: #dcfce7;
-      color: #166534;
-      border: 1px solid #bbf7d0;
-    }
-    
-    .text-center {
-      text-align: center;
-    }
-    
-    .mt-4 {
-      margin-top: 1rem;
-    }
-    
-    .mb-4 {
-      margin-bottom: 1rem;
-    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--font-body); background: var(--gray-50); color: var(--gray-800); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.625rem 1.25rem; border: none; border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease; text-decoration: none; white-space: nowrap; }
+    .btn-primary { background: var(--blue-mid); color: white; }
+    .btn-primary:hover { background: var(--blue-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.4); }
+    .btn-secondary { background: var(--gray-100); color: var(--gray-800); border: 1.5px solid var(--gray-200); }
+    .btn-secondary:hover { background: var(--gray-200); }
+    .btn-outline { background: transparent; border: 2px solid white; color: white; }
+    .btn-outline:hover { background: white; color: var(--blue-mid); }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-sm { padding: 0.4rem 0.9rem; font-size: 0.8rem; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .form-group { margin-bottom: 1.25rem; }
+    .form-label { display: block; margin-bottom: 0.4rem; font-size: 0.8rem; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.04em; }
+    .form-input { width: 100%; padding: 0.75rem 1rem; border: 2px solid var(--gray-200); border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 0.95rem; color: var(--gray-800); background: white; transition: all 0.2s; }
+    .form-input:focus { outline: none; border-color: var(--blue-mid); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+    .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow-sm); border: 1px solid var(--gray-200); padding: 1.5rem; }
+    .alert { padding: 0.875rem 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem; font-size: 0.9rem; }
+    .alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .alert-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    @keyframes shimmer { 0% { background-position: -500px 0; } 100% { background-position: 500px 0; } }
+    .skeleton { background: linear-gradient(90deg, var(--gray-100) 25%, var(--gray-200) 50%, var(--gray-100) 75%); background-size: 1000px 100%; animation: shimmer 1.5s infinite linear; border-radius: var(--radius-sm); }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    #modalOverlay { position: fixed; inset: 0; background: rgba(13,27,46,0.65); backdrop-filter: blur(4px); z-index: 9000; display: none; align-items: center; justify-content: center; padding: 1rem; }
+    #modalOverlay.show { display: flex; }
+    .modal-box { background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 100%; max-width: 440px; overflow: hidden; animation: slideUp 0.25s ease; }
+    .modal-box.modal-lg { max-width: 640px; }
+    .modal-box.modal-xl { max-width: 860px; }
+    .modal-header { padding: 1.5rem 1.75rem 1rem; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; gap: 1rem; }
+    .modal-icon { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; }
+    .modal-icon.success { background: #dcfce7; }
+    .modal-icon.error { background: #fee2e2; }
+    .modal-icon.warning { background: #fef3c7; }
+    .modal-icon.info { background: var(--blue-pale); }
+    .modal-title { font-family: var(--font-display); font-size: 1.2rem; font-weight: 600; color: var(--navy); }
+    .modal-body { padding: 1rem 1.75rem; color: var(--gray-600); line-height: 1.6; }
+    .modal-footer { padding: 1rem 1.75rem 1.5rem; display: flex; justify-content: flex-end; gap: 0.75rem; }
   </style>
 </head>
 <body>
   <slot />
+  <div id="modalOverlay">
+    <div class="modal-box" id="modalBox">
+      <div class="modal-header">
+        <div class="modal-icon" id="modalIcon"></div>
+        <div class="modal-title" id="modalTitle"></div>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer" id="modalFooter"></div>
+    </div>
+  </div>
+  <script is:inline>
+    window.Modal = {
+      show(opts) {
+        const { type='info', title, message, confirmText='Aceptar', cancelText=null, onConfirm, onCancel, size='' } = opts;
+        const icons = { success:'✅', error:'❌', warning:'⚠️', info:'ℹ️' };
+        document.getElementById('modalIcon').className = `modal-icon ${type}`;
+        document.getElementById('modalIcon').textContent = icons[type]||'💬';
+        document.getElementById('modalTitle').textContent = title;
+        document.getElementById('modalBody').innerHTML = message;
+        document.getElementById('modalBox').className = `modal-box${size?' '+size:''}`;
+        const footer = document.getElementById('modalFooter');
+        footer.innerHTML = '';
+        if (cancelText) {
+          const b = document.createElement('button');
+          b.className = 'btn btn-secondary';
+          b.textContent = cancelText;
+          b.onclick = () => { this.hide(); onCancel?.(); };
+          footer.appendChild(b);
+        }
+        const cb = document.createElement('button');
+        const btnClass = type==='error'?'danger':type==='success'?'success':'primary';
+        cb.className = `btn btn-${btnClass}`;
+        cb.textContent = confirmText;
+        cb.onclick = () => { this.hide(); onConfirm?.(); };
+        footer.appendChild(cb);
+        document.getElementById('modalOverlay').classList.add('show');
+      },
+      hide() { document.getElementById('modalOverlay').classList.remove('show'); },
+      success(title, msg, cb) { this.show({type:'success',title,message:msg,onConfirm:cb}); },
+      error(title, msg) { this.show({type:'error',title,message:msg}); },
+      warning(title, msg) { this.show({type:'warning',title,message:msg}); },
+      confirm(title, msg, onConfirm, onCancel) { this.show({type:'warning',title,message:msg,confirmText:'Confirmar',cancelText:'Cancelar',onConfirm,onCancel}); }
+    };
+    document.getElementById('modalOverlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('modalOverlay')) Modal.hide();
+    });
+  </script>
 </body>
 </html>

@@ -24,7 +24,9 @@ class Employee(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relaciones - Usamos backref para evitar dependencias circulares
-    user = relationship("User", backref="employee", uselist=False)
+    # uselist=False en el backref es CRÍTICO: hace que User.employee sea un objeto único,
+    # no una lista (InstrumentedList), lo que causaba AttributeError al acceder a .turno
+    user = relationship("User", backref=backref("employee", uselist=False), uselist=False)
     
     def __repr__(self) -> str:
         return f"<Employee(id={self.id}, user_id={self.user_id}, salario={self.salario})>"

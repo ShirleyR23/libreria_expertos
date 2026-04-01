@@ -42,44 +42,87 @@ class ExpertSystemService:
         Genera recomendaciones personalizadas para un cliente.
         
         REGLAS:
-        - SI cliente compra categoría frecuente → recomendar misma categoría
-        - SI cliente nuevo → recomendar más vendidos
-        - SI compra principiante → recomendar introductorios
+        1. Obtener TODOS los libros ya comprados por el cliente → excluirlos siempre
+        2. Obtener las TOP 3 categorías favoritas del cliente
+        3. Para cada categoría: recomendar libros no comprados, ordenados por popularidad
+        4. Si cliente nuevo (0 compras) → fallback a más vendidos con razón "Populares entre lectores"
+        5. Enriquecer cada recomendación con la razón personalizada
         """
-        # Verificar si es cliente nuevo (sin compras)
-        compras_cliente = self.db.query(Sale).filter(
+        # Libros ya comprados por el cliente (para excluir)
+        libros_ya_comprados = self.db.query(SaleItem.libro_id).join(
+            Sale, Sale.id == SaleItem.venta_id
+        ).filter(
             Sale.cliente_id == cliente_id,
             Sale.status == "COMPLETADA"
-        ).count()
-        
-        if compras_cliente == 0:
-            # Cliente nuevo: recomendar bestsellers
-            return self._get_bestseller_recommendations(limit)
-        
-        # Obtener categoría más comprada por el cliente
-        categoria_frecuente = self._get_client_favorite_category(cliente_id)
-        
-        if categoria_frecuente:
-            # Recomendar de la misma categoría
-            recomendaciones = self._get_recommendations_by_category(
-                categoria_frecuente, 
-                exclude_client_id=cliente_id,
-                limit=limit
-            )
-            
-            # Si no hay suficientes, complementar con bestsellers
-            if len(recomendaciones) < limit:
-                bestsellers = self._get_bestseller_recommendations(limit - len(recomendaciones))
-                # Filtrar duplicados
-                existing_ids = {r["id"] for r in recomendaciones}
-                for b in bestsellers:
-                    if b["id"] not in existing_ids:
-                        recomendaciones.append(b)
-            
-            return recomendaciones[:limit]
-        
-        # Fallback a bestsellers
-        return self._get_bestseller_recommendations(limit)
+        ).distinct().subquery()
+
+        # Verificar si es cliente nuevo
+        compras_count = self.db.query(func.count(Sale.id)).filter(
+            Sale.cliente_id == cliente_id,
+            Sale.status == "COMPLETADA"
+        ).scalar() or 0
+
+        if compras_count == 0:
+            return self._get_bestseller_recommendations(limit, razon="Populares entre nuestros lectores")
+
+        # Top 3 categorías favoritas del cliente
+        top_categorias = self.db.query(
+            Book.categoria_id,
+            func.sum(SaleItem.cantidad).label("total_comprado")
+        ).join(
+            SaleItem, SaleItem.libro_id == Book.id
+        ).join(
+            Sale, Sale.id == SaleItem.venta_id
+        ).filter(
+            Sale.cliente_id == cliente_id,
+            Sale.status == "COMPLETADA"
+        ).group_by(
+            Book.categoria_id
+        ).order_by(
+            func.sum(SaleItem.cantidad).desc()
+        ).limit(3).all()
+
+        recomendaciones = []
+        seen_ids = set()
+
+        for cat_id, _ in top_categorias:
+            # Nombre de la categoría para personalizar el mensaje
+            from app.models.book import BookCategory
+            cat = self.db.query(BookCategory).filter(BookCategory.id == cat_id).first()
+            cat_name = cat.name.value if cat and hasattr(cat.name, 'value') else str(cat.name) if cat else "tu categoría favorita"
+
+            libros = self.db.query(Book).filter(
+                Book.categoria_id == cat_id,
+                Book.stock > 0,
+                Book.activo == True,
+                ~Book.id.in_(libros_ya_comprados)
+            ).order_by(
+                Book.total_ventas.desc()
+            ).limit(limit).all()
+
+            for book in libros:
+                if book.id not in seen_ids and len(recomendaciones) < limit:
+                    seen_ids.add(book.id)
+                    recomendaciones.append(
+                        self._book_to_dict(book, razon=f"Te puede gustar · {cat_name}")
+                    )
+
+        # Complementar si hacen falta
+        if len(recomendaciones) < limit:
+            extra = self.db.query(Book).filter(
+                Book.stock > 0,
+                Book.activo == True,
+                ~Book.id.in_(libros_ya_comprados)
+            ).order_by(Book.total_ventas.desc()).limit(limit * 2).all()
+
+            for book in extra:
+                if book.id not in seen_ids and len(recomendaciones) < limit:
+                    seen_ids.add(book.id)
+                    recomendaciones.append(
+                        self._book_to_dict(book, razon="También te podría interesar")
+                    )
+
+        return recomendaciones[:limit]
     
     def _get_client_favorite_category(self, cliente_id: int) -> Optional[int]:
         """Obtiene la categoría más comprada por un cliente."""
@@ -126,7 +169,7 @@ class ExpertSystemService:
         
         return [self._book_to_dict(b, razon="Basado en tus preferencias") for b in books]
     
-    def _get_bestseller_recommendations(self, limit: int) -> List[Dict[str, Any]]:
+    def _get_bestseller_recommendations(self, limit: int, razon: str = "Los más vendidos") -> List[Dict[str, Any]]:
         """Obtiene recomendaciones de libros más vendidos."""
         books = self.db.query(Book).filter(
             Book.stock > 0,
@@ -135,7 +178,7 @@ class ExpertSystemService:
             Book.total_ventas.desc()
         ).limit(limit).all()
         
-        return [self._book_to_dict(b, razon="Los más vendidos") for b in books]
+        return [self._book_to_dict(b, razon=razon) for b in books]
     
     # ============================================================
     # REGLAS DE INVENTARIO INTELIGENTE
@@ -188,21 +231,26 @@ class ExpertSystemService:
                 "mensaje": f"Compra urgente: {book.ventas_ultimos_30_dias} ventas en 30 días, solo {book.stock} en stock"
             })
         
-        # Nuevos bestsellers: ventas_mes > 50 (usamos total_ventas como aproximación)
-        nuevos_bestsellers = self.db.query(Book).filter(
-            Book.total_ventas > self.thresholds.VENTAS_MES_BESTSELLER,
-            Book.es_bestseller == False,
-            Book.activo == True
-        ).all()
+        # Bestseller: el libro con MÁS copias vendidas (total_ventas) es el único bestseller
+        # Primero, desmarcar todos los bestsellers actuales
+        all_books_bs = self.db.query(Book).filter(Book.activo == True).all()
         
-        for book in nuevos_bestsellers:
-            book.es_bestseller = True
-            alerts["nuevos_bestsellers"].append({
-                "id": book.id,
-                "nombre": book.nombre,
-                "total_ventas": book.total_ventas,
-                "mensaje": f"¡Nuevo Bestseller! {book.total_ventas} ventas totales"
-            })
+        # Encontrar el libro con más ventas totales (mínimo 1 venta)
+        top_book = self.db.query(Book).filter(
+            Book.activo == True,
+            Book.total_ventas > 0
+        ).order_by(Book.total_ventas.desc()).first()
+        
+        for book in all_books_bs:
+            was_bestseller = book.es_bestseller
+            book.es_bestseller = (top_book is not None and book.id == top_book.id)
+            if book.es_bestseller and not was_bestseller:
+                alerts["nuevos_bestsellers"].append({
+                    "id": book.id,
+                    "nombre": book.nombre,
+                    "total_ventas": book.total_ventas,
+                    "mensaje": f"¡Bestseller! {book.total_ventas} copias vendidas (el más vendido)"
+                })
         
         self.db.commit()
         
@@ -248,6 +296,9 @@ class ExpertSystemService:
                 "nombre": book.nombre,
                 "autor": book.autor,
                 "stock": book.stock,
+                "precio": float(book.precio),
+                "precio_original": float(getattr(book, 'precio_original', None) or 0) or None,
+                "tiene_descuento": bool(getattr(book, 'precio_original', None)),
                 "dias_sin_venta": dias_sin_venta,
                 "ultima_venta": book.ultima_venta.isoformat() if book.ultima_venta else None,
                 "sugerencia": "Aplicar descuento o promoción",

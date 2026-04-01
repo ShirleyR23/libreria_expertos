@@ -1,32 +1,29 @@
 ---
-// Navbar lateral para dashboards
-
 interface Props {
   userRole: string;
   userName: string;
 }
-
 const { userRole, userName } = Astro.props;
 
-// Definir menús según el rol
 const menuItems: Record<string, Array<{label: string, href: string, icon: string}>> = {
   ADMIN: [
-    { label: 'Dashboard', href: '/dashboard-admin', icon: '📘' },
+    { label: 'Dashboard', href: '/dashboard-admin', icon: '▦' },
     { label: 'Inventario', href: '/inventario', icon: '📚' },
     { label: 'Ventas', href: '/ventas', icon: '💰' },
     { label: 'Compras', href: '/compras', icon: '📦' },
     { label: 'Empleados', href: '/empleados', icon: '👥' },
-    { label: 'Estadísticas', href: '/sistema-experto', icon: '📊'},
-    { label: 'Catálogo', href: '/catalogo', icon: '🏪' },
+    { label: 'Sistema Experto', href: '/sistema-experto', icon: '🤖' },
+    { label: 'Ver Catálogo', href: '/catalogo-admin', icon: '🏪' },
   ],
   EMPLEADO: [
-    { label: 'Dashboard', href: '/dashboard-empleado', icon: '📊' },
+    { label: 'Dashboard', href: '/dashboard-empleado', icon: '▦' },
     { label: 'Inventario', href: '/inventario', icon: '📚' },
     { label: 'Ventas', href: '/ventas', icon: '💰' },
-    { label: 'Catálogo', href: '/catalogo', icon: '🏪' },
+    { label: 'Ver Catálogo', href: '/catalogo-admin', icon: '🏪' },
   ],
   CLIENTE: [
     { label: 'Catálogo', href: '/catalogo', icon: '🏪' },
+    { label: 'Mis Libros', href: '/mis-libros', icon: '📖' },
     { label: 'Mis Compras', href: '/mis-compras', icon: '🛒' },
     { label: 'Recomendaciones', href: '/recomendaciones', icon: '⭐' },
   ],
@@ -34,98 +31,63 @@ const menuItems: Record<string, Array<{label: string, href: string, icon: string
 
 const currentMenu = menuItems[userRole] || menuItems.CLIENTE;
 const currentPath = Astro.url.pathname;
+const initials = userName.split(' ').map(w => w[0]).join('').substring(0,2).toUpperCase();
 ---
 
 <aside class="sidebar">
   <div class="sidebar-header">
-    <h1>📚 Librería</h1>
-    <p>Sistema de Gestión</p>
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon">📚</div>
+      <div class="sidebar-logo-text">Librería</div>
+    </div>
+    <div class="sidebar-user">
+      <div class="sidebar-user-name">{userName}</div>
+      <div class="sidebar-user-role">
+        <span class={`role-tag role-${userRole.toLowerCase()}`}>{userRole}</span>
+      </div>
+    </div>
   </div>
-  
+
   <nav class="sidebar-nav">
     <div class="nav-section">
-      <div class="nav-section-title">Menú Principal</div>
+      <div class="nav-section-title">Menú principal</div>
       {currentMenu.map(item => (
-        <a 
-          href={item.href} 
-          class={`nav-link ${currentPath === item.href ? 'active' : ''}`}
-        >
-          <span>{item.icon}</span>
+        <a href={item.href} class={`nav-link ${currentPath === item.href ? 'active' : ''}`}>
+          <span class="nav-icon">{item.icon}</span>
           <span>{item.label}</span>
         </a>
       ))}
     </div>
   </nav>
+
+  <div class="sidebar-footer">
+    <button id="logoutBtn" class="logout-btn">
+      <span>🚪</span>
+      <span>Cerrar sesión</span>
+    </button>
+  </div>
 </aside>
 
 <style>
-  .sidebar {
-    width: 260px;
-    background: linear-gradient(to bottom, #1e3a8a, #6d28d9);
-    color: white;
-    position: fixed;
-    height: 100vh;
-    overflow-y: auto;
-    z-index: 100;
-    font-family: 'Segoe UI', sans-serif;
-  }
-
-  .sidebar-header {
-    padding: 1.5rem;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    text-align: center;
-  }
-
-  .sidebar-header h1 {
-    font-size: 1.5rem;
-    font-weight: bold;
-    margin-bottom: 0.25rem;
-  }
-
-  .sidebar-header p {
-    font-size: 0.875rem;
-    opacity: 0.8;
-  }
-
-  .sidebar-nav {
-    padding: 1rem 0;
-  }
-
-  .nav-section-title {
-    padding: 0.5rem 1.5rem;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    opacity: 0.6;
-  }
-
-  .nav-link {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1.5rem;
-    color: rgba(255,255,255,0.9);
-    text-decoration: none;
-    transition: background 0.3s, color 0.3s;
-    border-left: 4px solid transparent;
-  }
-
-  .nav-link:hover {
-    background: rgba(255,255,255,0.1);
-    color: #fff;
-    border-left: 4px solid #c084fc;
-  }
-
-  .nav-link.active {
-    background: rgba(255,255,255,0.2);
-    color: #fff;
-    font-weight: bold;
-    border-left: 4px solid #a78bfa;
-  }
-
-  @media (max-width: 768px) {
-    .sidebar {
-      transform: translateX(-100%);
-    }
-  }
+  .sidebar { width: 260px; background: var(--navy); position: fixed; height: 100vh; overflow-y: auto; z-index: 100; display: flex; flex-direction: column; }
+  .sidebar-header { padding: 1.5rem 1.25rem; border-bottom: 1px solid rgba(255,255,255,0.07); }
+  .sidebar-logo { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1.25rem; }
+  .sidebar-logo-icon { font-size: 1.75rem; }
+  .sidebar-logo-text { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; color: white; }
+  .sidebar-user { }
+  .sidebar-user-name { font-size: 0.9rem; color: rgba(255,255,255,0.9); font-weight: 600; }
+  .sidebar-user-role { margin-top: 4px; }
+  .role-tag { display: inline-block; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
+  .role-admin { background: rgba(200,169,126,0.25); color: var(--beige); }
+  .role-empleado { background: rgba(59,130,246,0.25); color: #93c5fd; }
+  .role-cliente { background: rgba(34,197,94,0.2); color: #86efac; }
+  .sidebar-nav { flex: 1; padding: 1.25rem 0; }
+  .nav-section-title { padding: 0 1.25rem 0.5rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.3); font-weight: 600; }
+  .nav-link { display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem 1rem; margin: 1px 0.5rem; border-radius: var(--radius-sm); color: rgba(255,255,255,0.6); text-decoration: none; font-size: 0.875rem; font-weight: 500; transition: all 0.2s; }
+  .nav-link:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); }
+  .nav-link.active { background: rgba(37,99,235,0.35); color: white; border-left: 3px solid var(--blue-light); padding-left: calc(1rem - 3px); }
+  .nav-icon { font-size: 1rem; width: 20px; text-align: center; }
+  .sidebar-footer { padding: 1rem; border-top: 1px solid rgba(255,255,255,0.07); }
+  .logout-btn { width: 100%; display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 1rem; background: rgba(220,38,38,0.12); color: #fca5a5; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: all 0.2s; font-family: var(--font-body); }
+  .logout-btn:hover { background: rgba(220,38,38,0.25); color: #fee2e2; }
 </style>

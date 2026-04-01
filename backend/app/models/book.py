@@ -37,10 +37,18 @@ class Book(Base):
     stock_minimo = Column(Integer, default=5)
     
     # Campos para sistema experto
+    precio_original = Column(Numeric(10, 2), nullable=True)  # Precio antes del descuento (None = sin descuento)
     es_bestseller = Column(Boolean, default=False)
     total_ventas = Column(Integer, default=0)
     ventas_ultimos_30_dias = Column(Integer, default=0)
     ultima_venta = Column(DateTime)
+    
+    # Imagen de portada
+    imagen_url = Column(String(500), nullable=True)
+    
+    # PDF del libro (para lectura digital)
+    pdf_url = Column(String(500), nullable=True)     # ruta del PDF en el servidor
+    pdf_preview_pages = Column(Integer, default=3)    # cuántas páginas se muestran gratis
     
     # Metadatos
     activo = Column(Boolean, default=True)
@@ -71,6 +79,11 @@ class Book(Base):
         if self.stock < 0:
             self.stock = 0
     
+    @property
+    def has_pdf(self) -> bool:
+        """True si el libro tiene PDF cargado."""
+        return bool(self.pdf_url)
+
     def registrar_venta(self, cantidad: int = 1) -> None:
         """Registra una venta del libro."""
         from datetime import datetime, timezone

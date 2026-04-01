@@ -1,335 +1,383 @@
 ---
-// Página de gestión de ventas
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import TableComponent from '../components/TableComponent.astro';
 
-// Verificar que sea empleado o admin
 const userStr = Astro.cookies.get('user')?.value;
 let user = null;
-try {
-  user = userStr ? JSON.parse(userStr) : null;
-} catch (e) {}
-
-if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) {
-  return Astro.redirect('/login');
-}
-
-const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-
-// Obtener ventas
-let sales = [];
-try {
-  const response = await fetch(`${API_URL}/sales/all`, {
-    headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
-  });
-  if (response.ok) {
-    sales = await response.json();
-  }
-} catch (e) {
-  console.error('Error al cargar ventas:', e);
-}
-
-const columns = [
-  { key: 'id', label: 'ID' },
-  { key: 'tipo', label: 'Tipo', format: 'badge' },
-  { key: 'cliente_nombre', label: 'Cliente' },
-  { key: 'total', label: 'Total', format: 'currency' },
-  { key: 'status', label: 'Estado', format: 'badge' },
-  { key: 'created_at', label: 'Fecha', format: 'date' },
-];
+try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
+if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) return Astro.redirect('/login');
 ---
 
 <DashboardLayout title="Ventas" userRole={user.role_name}>
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">Registro de Ventas</h2>
-      <button id="newSaleBtn" class="btn btn-primary">+ Nueva Venta</button>
+  <!-- TOOLBAR -->
+  <div class="v-toolbar">
+    <div class="inv-search-wrap">
+      <span class="inv-search-icon">🔍</span>
+      <input type="text" id="salesSearch" class="inv-search" placeholder="Buscar por cliente o ID…">
     </div>
-    
-    <TableComponent 
-      columns={columns} 
-      data={sales}
-      emptyMessage="No hay ventas registradas"
-    />
+    <button id="newSaleBtn" class="btn btn-primary">＋ Nueva Venta</button>
   </div>
-  
-  <!-- Modal para nueva venta -->
-  <div id="saleModal" class="modal" style="display: none;">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>Nueva Venta</h3>
-        <button class="modal-close">&times;</button>
-      </div>
-      <form id="saleForm">
-        <div class="form-group">
-          <label>Tipo de Venta</label>
-          <select id="saleTipo" class="form-input">
-            <option value="PRESENCIAL">Presencial</option>
-            <option value="ONLINE">Online</option>
-          </select>
+
+  <!-- STATS -->
+  <div class="inv-stats" style="margin-bottom:1.5rem;display:grid;grid-template-columns:repeat(3,1fr);gap:1rem">
+    <div class="inv-stat-card blue"><div class="inv-stat-num" id="statTotal">—</div><div class="inv-stat-lbl">Total ventas</div></div>
+    <div class="inv-stat-card green"><div class="inv-stat-num" id="statIngresos">—</div><div class="inv-stat-lbl">Ingresos totales</div></div>
+    <div class="inv-stat-card orange"><div class="inv-stat-num" id="statCanceladas">—</div><div class="inv-stat-lbl">Canceladas</div></div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="inv-table-card">
+    <div id="salesLoading" class="table-loading-wrap">
+      <div class="loading-spinner"></div>
+      <p style="color:var(--gray-400);margin-top:0.75rem">Cargando ventas…</p>
+    </div>
+    <div class="inv-table-wrap" id="salesTableWrap" style="display:none">
+      <table class="inv-table">
+        <thead>
+          <tr>
+            <th>#ID</th><th>Tipo</th><th>Cliente</th><th>Empleado</th><th>Total</th><th>Estado</th><th>Fecha</th><th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="salesBody"></tbody>
+      </table>
+      <div id="salesEmpty" class="empty-table-msg" style="display:none">No hay ventas registradas todavía.</div>
+    </div>
+  </div>
+
+  <!-- NEW SALE MODAL -->
+  <div id="saleModal" class="modal-overlay">
+    <div class="modal-box modal-lg" style="max-height:92vh;overflow-y:auto">
+      <div class="sale-modal-header">
+        <div>
+          <div class="sale-modal-title">Nueva Venta Presencial</div>
+          <div class="sale-modal-sub">Registra una venta a un cliente</div>
+          <div class="sale-fisica-badge">📦 Copia física — venta en tienda</div>
         </div>
-        
-        <div id="itemsContainer">
-          <div class="sale-item-row">
-            <div class="form-group">
-              <label>Libro</label>
-              <select class="book-select form-input" required>
-                <option value="">Seleccionar libro</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Cantidad</label>
-              <input type="number" class="quantity-input form-input" min="1" value="1" required />
-            </div>
-            <button type="button" class="btn btn-danger remove-item">&times;</button>
+        <button id="closeSaleModal" class="modal-close-btn">✕</button>
+      </div>
+      <div style="padding:1.25rem 1.75rem">
+        <div id="itemsContainer"></div>
+        <button id="addItemBtn" class="btn btn-secondary btn-sm" style="margin-bottom:1.25rem">＋ Agregar libro</button>
+        <div style="margin-bottom:1rem">
+          <div class="form-label" style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--gray-400);margin-bottom:0.5rem">Método de pago</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem">
+            <label class="pay-opt"><input type="radio" name="salePayMethod" value="Efectivo" checked><span class="pay-card">💵 Efectivo</span></label>
+            <label class="pay-opt"><input type="radio" name="salePayMethod" value="Tarjeta"><span class="pay-card">💳 Tarjeta</span></label>
+            <label class="pay-opt"><input type="radio" name="salePayMethod" value="Transferencia"><span class="pay-card">🏦 Transferencia</span></label>
+          </div>
+          <div id="saleCardFields" style="display:none;margin-top:0.5rem">
+            <input type="text" id="saleCard4" class="form-input" maxlength="4" placeholder="Últimos 4 dígitos de tarjeta" style="font-size:0.85rem">
           </div>
         </div>
-        
-        <button type="button" id="addItemBtn" class="btn btn-secondary">+ Agregar Item</button>
-        
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Nombre del cliente <span style="color:var(--gray-400);font-weight:400">(opcional)</span></label>
+            <input type="text" id="saleClientName" class="form-input" placeholder="Ej. Juan Pérez">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">RTN cliente <span style="color:var(--gray-400);font-weight:400">(opcional)</span></label>
+            <input type="text" id="saleRtn" class="form-input" placeholder="0000-0000-000000" maxlength="20">
+          </div>
+        </div>
+
         <div class="form-group">
-          <label>Notas</label>
-          <textarea id="saleNotas" class="form-input" rows="2"></textarea>
+          <label class="form-label">Notas (opcional)</label>
+          <textarea id="saleNotas" class="form-input" rows="2" placeholder="Información adicional…"></textarea>
         </div>
-        
-        <div class="sale-total">
-          <strong>Total: L <span id="saleTotal">0.00</span></strong>
+        <div class="sale-total-row">
+          <span style="font-size:0.95rem;color:var(--gray-600)">Total estimado:</span>
+          <span class="sale-total-val">L <span id="saleTotal">0.00</span></span>
         </div>
-        
-        <button type="submit" class="btn btn-primary">Registrar Venta</button>
-      </form>
+      </div>
+      <div style="padding:1rem 1.75rem 1.5rem;display:flex;justify-content:flex-end;gap:0.75rem;border-top:1px solid var(--gray-100)">
+        <button id="cancelSaleBtn" class="btn btn-secondary">Cancelar</button>
+        <button id="submitSaleBtn" class="btn btn-primary">💰 Registrar venta</button>
+      </div>
     </div>
   </div>
 </DashboardLayout>
 
-<script>
-  const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+<script is:inline>
+  const API = 'http://localhost:8000/api/v1';
   const token = localStorage.getItem('token');
-  
-  let books = [];
-  
-  // Cargar libros
-  async function loadBooks() {
+  let allBooks = [];
+  let allSales = [];
+
+  // ── LOAD SALES ──────────────────────────────────────────────
+  async function loadSales() {
+    document.getElementById('salesLoading').style.display = 'flex';
+    document.getElementById('salesTableWrap').style.display = 'none';
     try {
-      const response = await fetch(`${API_URL}/books/catalog?solo_disponibles=true`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      books = await response.json();
-      
-      updateBookSelects();
-    } catch (error) {
-      console.error('Error al cargar libros:', error);
+      const r = await fetch(`${API}/sales/all`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!r.ok) throw new Error();
+      allSales = await r.json();
+      renderSales(allSales);
+    } catch(e) {
+      document.getElementById('salesLoading').innerHTML = '<p style="color:var(--danger);padding:2rem">Error al cargar ventas. <button onclick="loadSales()" class="btn btn-secondary btn-sm" style="margin-left:0.5rem">Reintentar</button></p>';
     }
   }
-  
-  function updateBookSelects() {
-    document.querySelectorAll('.book-select').forEach(select => {
-      const currentValue = select.value;
-      select.innerHTML = '<option value="">Seleccionar libro</option>' +
-        books.map(b => `<option value="${b.id}" data-price="${b.precio}">${b.nombre} (L ${b.precio}) - Stock: ${b.stock}</option>`).join('');
-      select.value = currentValue;
-    });
-  }
-  
-  // Modal
-  const modal = document.getElementById('saleModal');
-  document.getElementById('newSaleBtn')?.addEventListener('click', () => {
-    loadBooks();
-    modal.style.display = 'flex';
-  });
-  
-  document.querySelector('.modal-close')?.addEventListener('click', () => {
-    modal.style.display = 'none';
-  });
-  
-  // Add item
-  document.getElementById('addItemBtn')?.addEventListener('click', () => {
-    const container = document.getElementById('itemsContainer');
-    const newRow = document.createElement('div');
-    newRow.className = 'sale-item-row';
-    newRow.innerHTML = `
-      <div class="form-group">
-        <label>Libro</label>
-        <select class="book-select form-input" required>
-          <option value="">Seleccionar libro</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Cantidad</label>
-        <input type="number" class="quantity-input form-input" min="1" value="1" required />
-      </div>
-      <button type="button" class="btn btn-danger remove-item">&times;</button>
-    `;
-    container.appendChild(newRow);
-    updateBookSelects();
-    updateTotal();
-  });
-  
-  // Remove item
-  document.getElementById('itemsContainer')?.addEventListener('click', (e) => {
-    if (e.target.classList.contains('remove-item')) {
-      e.target.closest('.sale-item-row').remove();
-      updateTotal();
-    }
-  });
-  
-  // Update total
-  function updateTotal() {
-    let total = 0;
-    document.querySelectorAll('.sale-item-row').forEach(row => {
-      const bookSelect = row.querySelector('.book-select');
-      const quantityInput = row.querySelector('.quantity-input');
-      
-      if (bookSelect.value && quantityInput.value) {
-        const option = bookSelect.options[bookSelect.selectedIndex];
-        const price = parseFloat(option.dataset.price) || 0;
-        const quantity = parseInt(quantityInput.value) || 0;
-        total += price * quantity;
-      }
-    });
-    
-    // Add 15% tax
-    total = total * 1.15;
-    document.getElementById('saleTotal').textContent = total.toFixed(2);
-  }
-  
-  document.getElementById('itemsContainer')?.addEventListener('change', updateTotal);
-  
-  // Submit form
-  document.getElementById('saleForm')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const items = [];
-    document.querySelectorAll('.sale-item-row').forEach(row => {
-      const bookId = row.querySelector('.book-select').value;
-      const cantidad = parseInt(row.querySelector('.quantity-input').value);
-      if (bookId && cantidad) {
-        items.push({ libro_id: parseInt(bookId), cantidad });
-      }
-    });
-    
-    if (items.length === 0) {
-      alert('Debes agregar al menos un item');
+
+  function renderSales(sales) {
+    document.getElementById('salesLoading').style.display = 'none';
+    document.getElementById('salesTableWrap').style.display = 'block';
+
+    document.getElementById('statTotal').textContent = sales.length;
+    document.getElementById('statIngresos').textContent = 'L ' + sales.reduce((s, v) => s + parseFloat(v.total || 0), 0).toFixed(2);
+    document.getElementById('statCanceladas').textContent = sales.filter(v => v.status === 'CANCELADA').length;
+
+    const tbody = document.getElementById('salesBody');
+    if (!sales.length) {
+      tbody.innerHTML = '';
+      document.getElementById('salesEmpty').style.display = 'block';
       return;
     }
-    
-    const saleData = {
-      tipo: document.getElementById('saleTipo').value,
-      items,
-      notas: document.getElementById('saleNotas').value
-    };
-    
+    document.getElementById('salesEmpty').style.display = 'none';
+    tbody.innerHTML = sales.map(s => {
+      const statusClass = s.status === 'COMPLETADA' ? 'badge-success' : s.status === 'CANCELADA' ? 'badge-danger' : 'badge-warning';
+      const fecha = new Date(s.created_at).toLocaleDateString('es-HN', { day:'2-digit', month:'short', year:'numeric' });
+      return `<tr data-search="${s.id} ${s.cliente_nombre || ''}".toLowerCase()>
+        <td><span class="sale-id">#${s.id}</span></td>
+        <td><span class="sale-type-badge ${s.tipo === 'ONLINE' ? 'online' : 'presencial'}">${s.tipo}</span></td>
+        <td class="sale-cliente">${s.cliente_nombre || '—'}</td>
+        <td class="sale-empleado">${s.empleado_nombre || '—'}</td>
+        <td><strong class="inv-price">L ${parseFloat(s.total).toFixed(2)}</strong></td>
+        <td><span class="badge ${statusClass}">${s.status}</span></td>
+        <td class="sale-date">${fecha}</td>
+        <td>
+          <div style="display:flex;gap:0.4rem">
+            <a href="/factura?venta=${s.id}" class="btn-inv-ver" title="Ver factura">🧾 Ver</a>
+            <a href="/factura?venta=${s.id}" onclick="setTimeout(()=>window.print(),800)" class="btn-inv-dl" title="Descargar PDF">⬇ PDF</a>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── SEARCH ───────────────────────────────────────────────────
+  document.getElementById('salesSearch')?.addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    if (!q) { renderSales(allSales); return; }
+    renderSales(allSales.filter(s => `${s.id} ${s.cliente_nombre || ''}`.toLowerCase().includes(q)));
+  });
+
+  // ── MODAL ────────────────────────────────────────────────────
+  const modal = document.getElementById('saleModal');
+
+  function openSaleModal() { modal.classList.add('show'); }
+  function closeModal() {
+    modal.classList.remove('show');
+    document.getElementById('itemsContainer').innerHTML = '';
+    document.getElementById('saleTotal').textContent = '0.00';
+    document.getElementById('saleNotas').value = '';
+  }
+
+  document.getElementById('newSaleBtn')?.addEventListener('click', async () => {
+    await loadBooksForSale();
+    addItemRow();
+    openSaleModal();
+  });
+  document.getElementById('closeSaleModal')?.addEventListener('click', closeModal);
+  document.getElementById('cancelSaleBtn')?.addEventListener('click', closeModal);
+  modal?.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+  async function loadBooksForSale() {
+    if (allBooks.length > 0) return;
     try {
-      const response = await fetch(`${API_URL}/sales/presencial`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(saleData),
-      });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Error al registrar venta');
+      const r = await fetch(`${API}/books/catalog?limit=200`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (r.ok) allBooks = await r.json();
+    } catch(e) {}
+  }
+
+  function addItemRow() {
+    const container = document.getElementById('itemsContainer');
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <div class="form-group" style="flex:2">
+        <label class="form-label">Libro</label>
+        <select class="book-select form-input" required>
+          <option value="">Seleccionar libro…</option>
+          ${allBooks.map(b => `<option value="${b.id}" data-price="${b.precio}" data-stock="${b.stock}">${b.nombre} — L ${parseFloat(b.precio).toFixed(2)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group qty-group" style="flex:0 0 130px">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
+          Cantidad
+          <span class="stock-badge" style="display:none"></span>
+        </label>
+        <input type="number" class="qty-inp form-input" min="1" max="" value="1">
+      </div>
+      <button type="button" class="remove-row-btn" title="Eliminar">🗑</button>
+    `;
+
+    const sel = row.querySelector('.book-select');
+    const qtyInp = row.querySelector('.qty-inp');
+    const stockBadge = row.querySelector('.stock-badge');
+
+    sel.addEventListener('change', () => {
+      const opt = sel.options[sel.selectedIndex];
+      const stock = parseInt(opt?.dataset.stock || '0');
+      if (sel.value && stock > 0) {
+        qtyInp.max = stock;
+        if (parseInt(qtyInp.value) > stock) qtyInp.value = stock;
+        stockBadge.textContent = `Stock: ${stock}`;
+        stockBadge.className = `stock-badge ${stock <= 3 ? 'stock-low' : 'stock-ok'}`;
+        stockBadge.style.display = 'inline-flex';
+      } else if (sel.value && stock === 0) {
+        qtyInp.max = 0;
+        qtyInp.value = 0;
+        stockBadge.textContent = 'Sin stock';
+        stockBadge.className = 'stock-badge stock-none';
+        stockBadge.style.display = 'inline-flex';
+      } else {
+        qtyInp.max = '';
+        stockBadge.style.display = 'none';
       }
-      
-      modal.style.display = 'none';
-      window.location.reload();
-    } catch (error) {
-      alert(error.message);
+      updateTotal();
+    });
+
+    qtyInp.addEventListener('input', () => {
+      const max = parseInt(qtyInp.max);
+      if (max && parseInt(qtyInp.value) > max) qtyInp.value = max;
+      if (parseInt(qtyInp.value) < 1) qtyInp.value = 1;
+      updateTotal();
+    });
+
+    row.querySelector('.remove-row-btn').addEventListener('click', () => { row.remove(); updateTotal(); });
+    container.appendChild(row);
+  }
+
+  document.getElementById('addItemBtn')?.addEventListener('click', addItemRow);
+
+  // Payment method toggle in sale modal
+  document.querySelectorAll('input[name="salePayMethod"]').forEach(r => {
+    r.addEventListener('change', () => {
+      document.getElementById('saleCardFields').style.display = r.value === 'Tarjeta' ? 'block' : 'none';
+    });
+  });
+
+  function updateTotal() {
+    let total = 0;
+    document.querySelectorAll('.item-row').forEach(row => {
+      const sel = row.querySelector('.book-select');
+      const qty = parseInt(row.querySelector('.qty-inp').value) || 0;
+      if (sel.value) total += (parseFloat(sel.options[sel.selectedIndex].dataset.price) || 0) * qty;
+    });
+    document.getElementById('saleTotal').textContent = total.toFixed(2);
+  }
+
+  document.getElementById('submitSaleBtn')?.addEventListener('click', async () => {
+    const items = [];
+    let valid = true;
+    document.querySelectorAll('.item-row').forEach(row => {
+      const sel = row.querySelector('.book-select');
+      const qty = parseInt(row.querySelector('.qty-inp').value);
+      const stock = parseInt(sel.options[sel.selectedIndex]?.dataset.stock || '0');
+      if (!sel.value || !qty) { valid = false; return; }
+      if (qty > stock) { Modal.error('Stock insuficiente', 'No hay suficiente stock para la cantidad indicada.'); valid = false; return; }
+      items.push({ libro_id: parseInt(sel.value), cantidad: qty });
+    });
+    if (!valid) return;
+    if (!items.length) { Modal.warning('Sin items', 'Agrega al menos un libro a la venta.'); return; }
+
+    const btn = document.getElementById('submitSaleBtn');
+    btn.disabled = true; btn.textContent = 'Registrando…';
+    try {
+      const r = await fetch(`${API}/sales/presencial`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          items,
+          tipo: 'PRESENCIAL',
+          notas: (() => {
+            const pm = document.querySelector('input[name="salePayMethod"]:checked')?.value || 'Efectivo';
+            const c4 = document.getElementById('saleCard4')?.value.trim();
+            const cn = document.getElementById('saleClientName')?.value.trim();
+            const rtn = document.getElementById('saleRtn')?.value.trim();
+            const nota = document.getElementById('saleNotas').value.trim();
+            let n = 'Copia física | Pago: ' + pm;
+            if (pm === 'Tarjeta' && c4) n += ' (*' + c4 + ')';
+            if (cn) n += ' | Cliente: ' + cn;
+            if (rtn) n += ' | RTN: ' + rtn;
+            if (nota) n += ' | ' + nota;
+            return n;
+          })()
+        }),
+      });
+      if (!r.ok) { let errMsg = 'Error al registrar la venta'; try { const d = await r.json(); errMsg = Array.isArray(d.detail) ? d.detail.map(e => e.msg).join(', ') : (d.detail || errMsg); } catch(e) {} throw new Error(errMsg); }
+      closeModal();
+      Modal.success('¡Venta registrada!', 'La venta fue registrada exitosamente.', () => loadSales());
+    } catch(e) {
+      Modal.error('Error al registrar venta', e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '💰 Registrar venta';
     }
   });
+
+  // ── INIT ─────────────────────────────────────────────────────
+  loadSales();
+  setInterval(loadSales, 30000);
 </script>
 
-<style>
-  .modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-  }
-  
-  .modal-content {
-    background: white;
-    border-radius: 12px;
-    width: 90%;
-    max-width: 600px;
-    max-height: 90vh;
-    overflow-y: auto;
-  }
-  
-  .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  
-  .modal-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-  }
-  
-  #saleForm {
-    padding: 1.5rem;
-  }
-  
-  .sale-item-row {
-    display: grid;
-    grid-template-columns: 2fr 1fr auto;
-    gap: 1rem;
-    align-items: end;
-    margin-bottom: 1rem;
-    padding: 1rem;
-    background: #f8fafc;
-    border-radius: 8px;
-  }
-  
-  .form-group {
-    margin-bottom: 1rem;
-  }
-  
-  .form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-  }
-  
-  .form-input {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-  }
-  
-  .sale-total {
-    text-align: right;
-    font-size: 1.25rem;
-    margin: 1rem 0;
-    padding: 1rem;
-    background: #f0fdf4;
-    border-radius: 8px;
-  }
-  
-  .btn-danger {
-    background: #ef4444;
-    color: white;
-    padding: 0.5rem 1rem;
-  }
-  
-  .btn-secondary {
-    background: #e2e8f0;
-    color: #374151;
-    margin-bottom: 1rem;
-  }
+<style is:global>
+  .v-toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; gap:1rem; flex-wrap:wrap; }
+  .inv-search-wrap { position:relative; flex:1; max-width:380px; }
+  .inv-search-icon { position:absolute; left:0.875rem; top:50%; transform:translateY(-50%); }
+  .inv-search { width:100%; padding:0.6rem 0.875rem 0.6rem 2.5rem; border:2px solid var(--gray-200); border-radius:var(--radius-sm); font-family:inherit; font-size:0.9rem; }
+  .inv-search:focus { outline:none; border-color:var(--blue-mid); }
+  .inv-stat-card { padding:1.25rem 1.5rem; background:white; border-radius:var(--radius); border:1px solid rgba(13,27,46,0.06); box-shadow:0 4px 20px rgba(13,27,46,0.14); }
+  .inv-stat-num { font-size:1.75rem; font-weight:700; font-family:var(--font-display); }
+  .inv-stat-lbl { font-size:0.8rem; color:var(--gray-400); margin-top:2px; }
+  .inv-stat-card.blue .inv-stat-num { color:var(--blue-mid); }
+  .inv-stat-card.green .inv-stat-num { color:var(--success); font-size:1.4rem; }
+  .inv-stat-card.orange .inv-stat-num { color:var(--warning); }
+  .inv-table-card { background:white; border-radius:var(--radius); border:1px solid rgba(13,27,46,0.06); box-shadow:0 4px 20px rgba(13,27,46,0.14); overflow:hidden; }
+  .inv-table-wrap { overflow-x:auto; }
+  .inv-table { width:100%; border-collapse:collapse; }
+  .inv-table th { padding:0.875rem 1rem; text-align:left; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-400); font-weight:600; background:var(--gray-50); border-bottom:1px solid var(--gray-200); }
+  .inv-table td { padding:0.75rem 1rem; border-bottom:1px solid var(--gray-100); vertical-align:middle; }
+  .inv-table tr:last-child td { border-bottom:none; }
+  .inv-table tbody tr:hover { background:var(--gray-50); }
+  .sale-id { font-family:monospace; font-size:0.8rem; background:var(--gray-100); padding:2px 6px; border-radius:4px; color:var(--gray-600); }
+  .sale-type-badge { display:inline-block; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:999px; letter-spacing:0.04em; }
+  .online { background:var(--blue-pale); color:var(--blue-mid); }
+  .presencial { background:#dcfce7; color:#166534; }
+  .sale-cliente { font-size:0.875rem; color:var(--navy); font-weight:500; }
+  .sale-date { font-size:0.8rem; color:var(--gray-400); }
+  .inv-price { color:var(--blue-mid); }
+  .empty-table-msg { text-align:center; padding:3rem; color:var(--gray-400); }
+  .table-loading-wrap { display:flex; align-items:center; justify-content:center; padding:4rem 2rem; flex-direction:column; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loading-spinner { width:44px; height:44px; border:3px solid var(--gray-200); border-top-color:var(--blue-mid); border-radius:50%; animation:spin 0.8s linear infinite; }
+
+  /* MODAL */
+  .modal-overlay { position:fixed; inset:0; background:rgba(13,27,46,0.65); backdrop-filter:blur(4px); z-index:9000; display:none; align-items:center; justify-content:center; padding:1rem; }
+  .modal-overlay.show { display:flex; }
+  .modal-box { background:white; border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); width:100%; }
+  .modal-box.modal-lg { max-width:640px; }
+  .sale-modal-header { display:flex; justify-content:space-between; align-items:center; padding:1.5rem 1.75rem 1rem; border-bottom:1px solid var(--gray-100); }
+  .sale-modal-title { font-family:var(--font-display); font-size:1.3rem; font-weight:700; color:var(--navy); }
+  .sale-modal-sub { font-size:0.85rem; color:var(--gray-400); margin-top:2px; }
+  .sale-fisica-badge { display:inline-block; margin-top:6px; font-size:0.72rem; font-weight:700; background:#fef3c7; color:#92400e; padding:3px 10px; border-radius:999px; border:1px solid #fcd34d; }
+  .modal-close-btn { width:32px; height:32px; border-radius:50%; border:none; background:var(--gray-100); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.8rem; }
+  .modal-close-btn:hover { background:var(--gray-200); }
+  .item-row { display:flex; align-items:flex-end; gap:0.75rem; padding:1rem; background:var(--gray-50); border-radius:var(--radius-sm); border:1.5px solid var(--gray-200); margin-bottom:0.75rem; }
+  .remove-row-btn { background:none; border:none; cursor:pointer; font-size:1.1rem; opacity:0.5; flex-shrink:0; margin-bottom:0.75rem; }
+  .remove-row-btn:hover { opacity:1; }
+  .sale-total-row { display:flex; justify-content:space-between; align-items:center; padding:1rem 1.25rem; background:var(--blue-ghost); border-radius:var(--radius-sm); border:1.5px solid var(--blue-pale); }
+  .sale-empleado { font-size:0.875rem; color:var(--gray-500); }
+  .btn-inv-ver,.btn-inv-dl { display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:6px;font-size:0.7rem;font-weight:700;text-decoration:none;white-space:nowrap;transition:all 0.15s; }
+  .btn-inv-ver { background:var(--blue-pale);color:var(--blue-mid);border:1px solid rgba(37,99,235,0.2); }
+  .btn-inv-ver:hover { background:var(--blue-mid);color:white; }
+  .btn-inv-dl { background:#f0fdf4;color:#166534;border:1px solid rgba(22,101,52,0.2); }
+  .btn-inv-dl:hover { background:#166534;color:white; }
+  .stock-badge { font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:999px; letter-spacing:0.03em; }
+  .pay-opt { cursor:pointer; }
+  .pay-opt input { display:none; }
+  .pay-card { display:flex; align-items:center; justify-content:center; padding:0.5rem; border:1.5px solid var(--gray-200); border-radius:var(--radius-sm); font-size:0.78rem; font-weight:600; transition:all 0.15s; background:white; gap:0.3rem; }
+  .pay-opt input:checked + .pay-card { border-color:var(--blue-mid); background:var(--blue-ghost); color:var(--blue-mid); }
+  .pay-card:hover { border-color:var(--blue-mid); }
+  .stock-ok { background:#dcfce7; color:#166534; }
+  .stock-low { background:#fef9c3; color:#854d0e; }
+  .stock-none { background:#fee2e2; color:#991b1b; }
 </style>

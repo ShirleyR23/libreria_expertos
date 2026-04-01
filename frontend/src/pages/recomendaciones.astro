@@ -1,192 +1,389 @@
 ---
-// Página de recomendaciones para clientes
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import BookCard from '../components/BookCard.astro';
-
-// Verificar que sea cliente
 const userStr = Astro.cookies.get('user')?.value;
 let user = null;
-try {
-  user = userStr ? JSON.parse(userStr) : null;
-} catch (e) {}
-
-if (!user || (user.role_name !== 'CLIENTE' && user.role_name !== 'ADMIN')) {
-  return Astro.redirect('/login');
-}
-
-const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-
-// Obtener recomendaciones
-let recommendations = [];
-try {
-  const response = await fetch(`${API_URL}/expert/recommendations?limit=8`, {
-    headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
-  });
-  if (response.ok) {
-    recommendations = await response.json();
-  }
-} catch (e) {
-  console.error('Error al cargar recomendaciones:', e);
-}
+try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
+if (!user || (user.role_name !== 'CLIENTE' && user.role_name !== 'ADMIN')) return Astro.redirect('/login');
 ---
 
-<DashboardLayout title="Recomendaciones para Ti" userRole={user.role_name}>
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">⭐ Recomendaciones Personalizadas</h2>
+<DashboardLayout title="Recomendaciones" userRole={user.role_name}>
+
+  <!-- HERO -->
+  <div class="rec-hero">
+    <div class="rec-hero-inner">
+      <div class="rec-hero-icon">⭐</div>
+      <div>
+        <h1 class="rec-hero-title">Recomendaciones para ti</h1>
+        <p class="rec-hero-sub">Selección personalizada basada en tus compras y gustos</p>
+      </div>
     </div>
-    
-    <p class="description">
-      Basado en tus compras anteriores y preferencias, te recomendamos estos libros:
-    </p>
-    
-    {recommendations.length > 0 ? (
-      <div class="recommendations-grid">
-        {recommendations.map(book => (
-          <div class="recommendation-card">
-            <div class="book-image">
-              <div class="book-placeholder">📖</div>
-              {book.es_bestseller && <span class="bestseller-badge">⭐ Bestseller</span>}
-            </div>
-            <div class="book-info">
-              <span class="recommendation-reason">{book.razon_recomendacion}</span>
-              <h3>{book.nombre}</h3>
-              <p class="author">por {book.autor}</p>
-              <p class="price">L {book.precio.toFixed(2)}</p>
-              <p class={`stock ${book.stock < 5 ? 'low' : ''}`}>
-                {book.stock > 0 ? `${book.stock} disponibles` : 'Sin stock'}
-              </p>
-            </div>
+    <button id="refreshBtn" class="btn btn-secondary btn-sm">🔄 Actualizar</button>
+  </div>
+
+  <!-- LOADING -->
+  <div id="loadingArea" class="rec-loading">
+    <div class="loading-spinner"></div>
+    <p>Analizando tus preferencias…</p>
+  </div>
+
+  <!-- EMPTY -->
+  <div id="emptyArea" style="display:none" class="rec-empty">
+    <div class="rec-empty-icon">📚</div>
+    <h3>Aún no hay recomendaciones personalizadas</h3>
+    <p>Realiza tu primera compra y empezaremos a conocer tus gustos</p>
+    <a href="/catalogo" class="btn btn-primary" style="margin-top:1rem">Explorar catálogo</a>
+  </div>
+
+  <!-- RECOMMENDED FOR YOU SECTION -->
+  <div id="recSectionWrap" style="display:none">
+    <div class="sec-header sec-header-blue">
+      <div class="sec-header-icon">🎯</div>
+      <div>
+        <div class="sec-header-title">Seleccionados para ti</div>
+        <div id="reasonText" class="sec-header-sub"></div>
+      </div>
+    </div>
+    <div id="recGrid" class="rec-grid"></div>
+  </div>
+
+  <!-- BESTSELLERS SECTION -->
+  <div id="bestsellersSection" style="display:none;margin-top:2.5rem">
+    <div class="sec-header sec-header-fire">
+      <div class="sec-header-icon">🔥</div>
+      <div>
+        <div class="sec-header-title">Los más vendidos</div>
+        <div class="sec-header-sub">Títulos con mayor movimiento en nuestra librería</div>
+      </div>
+    </div>
+    <div id="bestsellerGrid" class="rec-grid rec-grid-sm"></div>
+  </div>
+
+  <!-- BUY MODAL (same as catalog) -->
+  <div id="recBuyModal" class="buy-modal-overlay" style="display:none">
+    <div class="buy-modal-box">
+      <div class="buy-modal-header">
+        <h2 class="buy-modal-title">Confirmar compra</h2>
+        <button id="closeRecBuyModal" class="buy-modal-close">✕</button>
+      </div>
+      <div class="buy-modal-body">
+        <div id="recBuyBookInfo"></div>
+        <div class="buy-qty-wrap">
+          <label class="form-label">Cantidad</label>
+          <div class="qty-control">
+            <button class="qty-btn" id="recQtyMinus">−</button>
+            <input type="number" id="recQtyInput" class="qty-input" value="1" min="1">
+            <button class="qty-btn" id="recQtyPlus">+</button>
           </div>
-        ))}
+        </div>
+        <div class="buy-section-title">Método de pago</div>
+        <div class="pay-method-grid">
+          <label class="pay-method-opt"><input type="radio" name="recPayMethod" value="efectivo" checked><span class="pay-method-card">💵 Efectivo</span></label>
+          <label class="pay-method-opt"><input type="radio" name="recPayMethod" value="tarjeta"><span class="pay-method-card">💳 Tarjeta</span></label>
+          <label class="pay-method-opt"><input type="radio" name="recPayMethod" value="transferencia"><span class="pay-method-card">🏦 Transferencia</span></label>
+        </div>
+        <div id="recCardFields" style="display:none" class="card-fields-wrap">
+          <input type="text" id="recCard4" class="form-input" maxlength="4" placeholder="Últimos 4 dígitos" style="font-size:0.85rem">
+        </div>
+        <div class="form-group" style="margin-top:0.75rem;margin-bottom:0">
+          <label class="form-label" style="font-size:0.78rem">RTN <span style="color:var(--gray-400);font-weight:400">(opcional)</span></label>
+          <input type="text" id="recRtn" class="form-input" placeholder="0000-0000-000000" maxlength="20">
+        </div>
+        <div class="buy-total-row" style="margin-top:0.75rem">
+          <span>Total a pagar:</span>
+          <span id="recBuyTotal" class="buy-total-amount">L 0.00</span>
+        </div>
       </div>
-    ) : (
-      <div class="empty-state">
-        <p>No tenemos recomendaciones personalizadas en este momento.</p>
-        <a href="/catalogo" class="btn btn-primary">Explorar Catálogo</a>
+      <div class="buy-modal-footer">
+        <button id="cancelRecBuyBtn" class="btn btn-secondary">Cancelar</button>
+        <button id="confirmRecBuyBtn" class="btn btn-primary">🛒 Confirmar compra</button>
       </div>
-    )}
-  </div>
-  
-  <div class="card mt-4">
-    <div class="card-header">
-      <h2 class="card-title">🔥 Los Más Vendidos</h2>
-    </div>
-    <p class="description">
-      Descubre los libros que más están gustando a nuestros lectores.
-    </p>
-    <div class="action-links">
-      <a href="/catalogo" class="btn btn-primary">Ver Catálogo Completo</a>
     </div>
   </div>
+
 </DashboardLayout>
 
-<style>
-  .description {
-    color: #64748b;
-    margin-bottom: 1.5rem;
+<script is:inline>
+  const API = 'http://localhost:8000/api/v1';
+  let recBuyBook = null;
+
+  // Category color config
+  const CAT_CFG = {
+    'FICCIÓN': { bg:'#f5f0ff', color:'#6d28d9', icon:'📖' },
+    'TECNOLOGÍA': { bg:'#eff6ff', color:'#1d4ed8', icon:'💻' },
+    'CIENCIA': { bg:'#ecfdf5', color:'#065f46', icon:'🔬' },
+    'HISTORIA': { bg:'#fef3c7', color:'#92400e', icon:'🏛️' },
+    'ARTE': { bg:'#fdf2f8', color:'#9d174d', icon:'🎨' },
+    'NEGOCIOS': { bg:'#f0fdf4', color:'#166534', icon:'💼' },
+    'AUTOAYUDA': { bg:'#fff7ed', color:'#9a3412', icon:'🌱' },
+    'INFANTIL': { bg:'#fefce8', color:'#854d0e', icon:'🧒' },
+    'FILOSOFÍA': { bg:'#f5f3ff', color:'#4c1d95', icon:'🧠' },
+    'DEFAULT': { bg:'#f8fafc', color:'#334155', icon:'📚' }
+  };
+  function getCfg(name) { return CAT_CFG[name?.toUpperCase()] || CAT_CFG['DEFAULT']; }
+
+  function buildCard(book, size) {
+    const cfg = getCfg(book.categoria?.name || '');
+    const outOfStock = book.stock === 0;
+    const bsBadge = book.es_bestseller ? '<div class="rec-bs-badge">⭐ Bestseller</div>' : '';
+    const reasonBadge = book.razon_recomendacion ? `<div class="rec-reason-badge">${book.razon_recomendacion}</div>` : '';
+
+    // Descuento
+    const tieneDescuento = !!book.precio_original;
+    const precioBase = tieneDescuento ? parseFloat(book.precio_original) : null;
+    const precio = parseFloat(book.precio);
+    const discPct = tieneDescuento ? Math.round((1 - precio / precioBase) * 100) : 0;
+    const discBadge = tieneDescuento ? `<div class="rec-discount-badge">-${discPct}%</div>` : '';
+
+    const stockLabel = outOfStock
+      ? '<span class="rec-stock-none">Sin stock</span>'
+      : book.stock <= 3
+        ? `<span class="rec-stock-low">⚡ Solo ${book.stock} disp.</span>`
+        : `<span class="rec-stock-ok">✓ ${book.stock} disponibles</span>`;
+    const buyBtn = outOfStock
+      ? '<button class="rec-buy-btn rec-buy-disabled" disabled>Sin stock</button>'
+      : `<button class="rec-buy-btn" data-id="${book.id}" data-nombre="${book.nombre}" data-precio="${precio}" data-stock="${book.stock}">🛒 Comprar</button>`;
+
+    return `
+      <article class="rec-card ${size === 'sm' ? 'rec-card-sm' : ''}${tieneDescuento ? ' rec-card-discounted' : ''}">
+        <div class="rec-card-cover" style="background:linear-gradient(135deg,${cfg.bg},${cfg.color}22)">
+          <div class="rec-card-icon" style="color:${cfg.color}">${cfg.icon}</div>
+          ${bsBadge}
+          ${discBadge}
+          ${outOfStock ? '<div class="rec-oos-overlay">Agotado</div>' : ''}
+        </div>
+        <div class="rec-card-body">
+          ${reasonBadge}
+          <div class="rec-card-title">${book.nombre}</div>
+          <div class="rec-card-author">✍️ ${book.autor || 'Autor desconocido'}</div>
+          <div class="rec-card-footer">
+            <div>
+              ${tieneDescuento
+                ? `<div class="rec-card-price rec-price-discount">L ${precio.toFixed(2)} <span class="rec-price-orig">L ${precioBase.toFixed(2)}</span></div>`
+                : `<div class="rec-card-price">L ${precio.toFixed(2)}</div>`
+              }
+              ${stockLabel}
+            </div>
+            ${buyBtn}
+          </div>
+        </div>
+      </article>`;
   }
-  
-  .recommendations-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 1.5rem;
+
+  async function loadRecommendations() {
+    const token = localStorage.getItem('token');
+    document.getElementById('loadingArea').style.display = 'flex';
+    document.getElementById('recSectionWrap').style.display = 'none';
+    document.getElementById('emptyArea').style.display = 'none';
+    document.getElementById('bestsellersSection').style.display = 'none';
+
+    try {
+      const [recRes, bsRes] = await Promise.all([
+        fetch(API + '/expert/recommendations?limit=8', { headers: { 'Authorization': 'Bearer ' + token } }),
+        fetch(API + '/books/bestsellers?limit=6', { headers: { 'Authorization': 'Bearer ' + token } })
+      ]);
+
+      document.getElementById('loadingArea').style.display = 'none';
+
+      // ── RECOMENDACIONES PERSONALIZADAS ──────────────────────
+      let shownRecIds = new Set();
+      if (recRes.ok) {
+        const recs = await recRes.json();
+        if (recs.length === 0) {
+          document.getElementById('emptyArea').style.display = 'flex';
+        } else {
+          // Collect unique reasons to show in subtitle
+          const reasons = [...new Set(recs.map(function(r){ return r.razon_recomendacion; }).filter(Boolean))];
+          const isGeneric = reasons.every(function(r){ return r === 'Populares entre nuestros lectores' || r === 'Los más vendidos'; });
+          if (isGeneric) {
+            // No personal data yet — hide "seleccionados para ti" and just show empty prompt
+            document.getElementById('emptyArea').style.display = 'flex';
+          } else {
+            const subtitle = reasons.length > 0
+              ? '💡 Basado en tus compras: ' + reasons.filter(function(r){ return r !== 'También te podría interesar'; }).slice(0,2).join(' · ')
+              : '💡 Selección personalizada basada en tus compras';
+            document.getElementById('reasonText').textContent = subtitle;
+            document.getElementById('recGrid').innerHTML = recs.map(function(b){ return buildCard(b, 'lg'); }).join('');
+            document.getElementById('recSectionWrap').style.display = 'block';
+            attachBuyHandlers(document.getElementById('recGrid'));
+            recs.forEach(function(b){ shownRecIds.add(b.id); });
+          }
+        }
+      }
+
+      // ── BESTSELLERS (los más vendidos reales, sin repetir) ───
+      if (bsRes.ok) {
+        const bsBooks = await bsRes.json();
+        const topBs = bsBooks.filter(function(b){ return !shownRecIds.has(b.id) && b.total_ventas > 0; }).slice(0, 6);
+        if (topBs.length > 0) {
+          document.getElementById('bestsellerGrid').innerHTML = topBs.map(function(b){ return buildCard(b, 'sm'); }).join('');
+          document.getElementById('bestsellersSection').style.display = 'block';
+          attachBuyHandlers(document.getElementById('bestsellerGrid'));
+        }
+      }
+    } catch(e) {
+      document.getElementById('loadingArea').style.display = 'none';
+      document.getElementById('emptyArea').style.display = 'flex';
+    }
   }
-  
-  .recommendation-card {
-    background: white;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    transition: transform 0.2s;
+
+  function attachBuyHandlers(container) {
+    container.querySelectorAll('.rec-buy-btn:not(.rec-buy-disabled)').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        recBuyBook = { id: +btn.dataset.id, nombre: btn.dataset.nombre, precio: +btn.dataset.precio, stock: +btn.dataset.stock };
+        document.getElementById('recQtyInput').value = 1;
+        document.getElementById('recQtyInput').max = recBuyBook.stock;
+        document.getElementById('recBuyBookInfo').innerHTML =
+          '<div class="buy-book-info-card"><div class="buy-book-thumb" style="background:linear-gradient(135deg,#1e3a6e,#2563eb)">📚</div>' +
+          '<div><div style="font-weight:700;color:var(--navy)">' + recBuyBook.nombre + '</div>' +
+          '<div style="color:var(--blue-mid);font-size:0.9rem">L ' + parseFloat(recBuyBook.precio).toFixed(2) + ' / unidad</div>' +
+          '<div style="font-size:0.78rem;color:var(--gray-400)">' + recBuyBook.stock + ' disponibles</div></div></div>';
+        updateRecTotal();
+        document.getElementById('recBuyModal').style.display = 'flex';
+      });
+    });
   }
-  
-  .recommendation-card:hover {
-    transform: translateY(-4px);
+
+  function updateRecTotal() {
+    if (!recBuyBook) return;
+    const qty = Math.max(1, Math.min(+document.getElementById('recQtyInput').value || 1, recBuyBook.stock));
+    document.getElementById('recQtyInput').value = qty;
+    document.getElementById('recBuyTotal').textContent = 'L ' + (recBuyBook.precio * qty).toFixed(2);
   }
-  
-  .book-image {
-    position: relative;
-    height: 150px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .book-placeholder {
-    font-size: 3rem;
-  }
-  
-  .bestseller-badge {
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    background: #f59e0b;
-    color: white;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-  
-  .book-info {
-    padding: 1rem;
-  }
-  
-  .recommendation-reason {
-    display: inline-block;
-    background: #dbeafe;
-    color: #1e40af;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    margin-bottom: 0.5rem;
-  }
-  
-  .book-info h3 {
-    font-size: 1rem;
-    margin-bottom: 0.25rem;
-    line-height: 1.4;
-  }
-  
-  .author {
-    font-size: 0.875rem;
-    color: #64748b;
-    margin-bottom: 0.5rem;
-  }
-  
-  .price {
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: #3b82f6;
-    margin-bottom: 0.25rem;
-  }
-  
-  .stock {
-    font-size: 0.875rem;
-    color: #22c55e;
-  }
-  
-  .stock.low {
-    color: #f59e0b;
-  }
-  
-  .empty-state {
-    text-align: center;
-    padding: 3rem;
-  }
-  
-  .empty-state p {
-    color: #64748b;
-    margin-bottom: 1rem;
-  }
-  
-  .mt-4 {
-    margin-top: 1.5rem;
-  }
-  
-  .action-links {
-    margin-top: 1rem;
-  }
+
+  document.getElementById('recQtyMinus')?.addEventListener('click', function() {
+    const i = document.getElementById('recQtyInput'); if (+i.value > 1) { i.value = +i.value - 1; updateRecTotal(); }
+  });
+  document.getElementById('recQtyPlus')?.addEventListener('click', function() {
+    const i = document.getElementById('recQtyInput'); if (!recBuyBook || +i.value < recBuyBook.stock) { i.value = +i.value + 1; updateRecTotal(); }
+  });
+  document.getElementById('recQtyInput')?.addEventListener('input', updateRecTotal);
+
+  function closeRecModal() { document.getElementById('recBuyModal').style.display = 'none'; }
+  document.getElementById('closeRecBuyModal')?.addEventListener('click', closeRecModal);
+  document.getElementById('cancelRecBuyBtn')?.addEventListener('click', closeRecModal);
+  document.querySelectorAll('input[name="recPayMethod"]').forEach(function(r) {
+    r.addEventListener('change', function() { document.getElementById('recCardFields').style.display = r.value === 'tarjeta' ? 'block' : 'none'; });
+  });
+
+  document.getElementById('confirmRecBuyBtn')?.addEventListener('click', async function() {
+    if (!recBuyBook) return;
+    const qty = +document.getElementById('recQtyInput').value;
+    const btn = document.getElementById('confirmRecBuyBtn');
+    btn.disabled = true; btn.textContent = 'Procesando…';
+    try {
+      const tok = localStorage.getItem('token');
+      const pm = document.querySelector('input[name="recPayMethod"]:checked')?.value || 'efectivo';
+      const c4 = document.getElementById('recCard4')?.value.trim();
+      const rtn = document.getElementById('recRtn').value.trim();
+      let nota = 'Pago: ' + pm.charAt(0).toUpperCase() + pm.slice(1);
+      if (pm === 'tarjeta' && c4) nota += ' (*' + c4 + ')';
+      if (rtn) nota += ' | RTN: ' + rtn;
+
+      const r = await fetch(API + '/sales/online', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+        body: JSON.stringify({ tipo: 'ONLINE', items: [{ libro_id: recBuyBook.id, cantidad: qty }], notas: nota })
+      });
+      if (!r.ok) { const d = await r.json().catch(function(){ return {}; }); throw new Error(d.detail || 'Error al comprar'); }
+      closeRecModal();
+      Modal.success('¡Compra realizada!', 'Compraste ' + qty + '× <strong>' + recBuyBook.nombre + '</strong>.<br>Puedes ver tu factura en <a href="/mis-compras">Mis Compras</a>.');
+      loadRecommendations();
+    } catch(e) {
+      Modal.error('Error al comprar', e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '🛒 Confirmar compra';
+    }
+  });
+
+  document.getElementById('refreshBtn')?.addEventListener('click', loadRecommendations);
+  loadRecommendations();
+</script>
+
+<style is:global>
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loading-spinner { width:44px;height:44px;border:3px solid var(--gray-200);border-top-color:var(--blue-mid);border-radius:50%;animation:spin 0.8s linear infinite; }
+
+  .rec-hero { display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#0d1b2e,#1e3a6e);border-radius:var(--radius);padding:1.5rem 2rem;margin-bottom:1.5rem;color:white; }
+  .rec-hero-inner { display:flex;align-items:center;gap:1rem; }
+  .rec-hero-icon { font-size:2.5rem; }
+  .rec-hero-title { font-family:var(--font-display);font-size:1.5rem;font-weight:700;margin-bottom:2px; }
+  .rec-hero-sub { font-size:0.85rem;color:rgba(255,255,255,0.6); }
+
+  .rec-loading { display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem;background:white;border-radius:var(--radius);border:1px solid var(--gray-200);gap:1rem;color:var(--gray-400); }
+  .rec-empty { display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem;background:white;border-radius:var(--radius);border:1px solid var(--gray-200);text-align:center; }
+  .rec-empty-icon { font-size:4rem;margin-bottom:1rem; }
+  .rec-empty h3 { font-family:var(--font-display);font-size:1.25rem;color:var(--navy);margin-bottom:0.5rem; }
+  .rec-empty p { color:var(--gray-400);font-size:0.9rem; }
+
+  .reason-banner { display:flex;align-items:center;gap:0.5rem;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:var(--radius-sm);padding:0.6rem 1rem;margin-bottom:1.25rem;font-size:0.85rem;font-weight:600;color:#1e40af; }
+
+  /* section headers replaced — see sec-header below */
+
+  /* Bestsellers section header */
+  .bs-section-header { display:flex;align-items:center;gap:1rem;background:linear-gradient(135deg,#fff7ed,#fef3c7);border:1.5px solid #fde68a;border-radius:var(--radius);padding:1rem 1.5rem;margin-bottom:1.25rem; }
+  .bs-section-icon { font-size:2rem;flex-shrink:0; }
+  .bs-section-title { font-family:var(--font-display);font-size:1.1rem;font-weight:700;color:#92400e; }
+  .bs-section-sub { font-size:0.8rem;color:#b45309;margin-top:2px; }
+
+  /* CARDS */
+  .rec-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1.25rem; }
+  .rec-grid-sm { grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
+
+  .rec-card { background:white;border-radius:var(--radius);border:1px solid var(--gray-200);box-shadow:var(--shadow-sm);overflow:hidden;transition:transform 0.2s,box-shadow 0.2s; }
+  .rec-card:hover { transform:translateY(-3px);box-shadow:0 8px 24px rgba(13,27,46,0.12); }
+  .rec-card-sm .rec-card-cover { height:100px; }
+
+  .rec-card-cover { position:relative;height:140px;display:flex;align-items:center;justify-content:center; }
+  .rec-card-icon { font-size:3rem;line-height:1; }
+  .rec-bs-badge { position:absolute;top:8px;left:8px;background:linear-gradient(135deg,#f59e0b,#d97706);color:white;padding:3px 8px;border-radius:999px;font-size:0.65rem;font-weight:700; }
+  .rec-discount-badge { position:absolute;bottom:8px;left:8px;background:linear-gradient(135deg,#dc2626,#991b1b);color:white;padding:3px 9px;border-radius:999px;font-size:0.7rem;font-weight:800;box-shadow:0 2px 8px rgba(220,38,38,0.4);letter-spacing:0.02em; }
+  .rec-card-discounted .rec-card-price { color:#dc2626; }
+  .rec-price-orig { font-size:0.75rem;color:#94a3b8;text-decoration:line-through;margin-left:3px;font-weight:400; }
+  .rec-oos-overlay { position:absolute;inset:0;background:rgba(255,255,255,0.75);display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700;color:var(--gray-400);backdrop-filter:blur(2px); }
+
+  .rec-card-body { padding:0.875rem; }
+  .rec-reason-badge { display:inline-block;background:#eff6ff;color:#1e40af;padding:2px 7px;border-radius:999px;font-size:0.65rem;font-weight:700;margin-bottom:0.5rem;letter-spacing:0.02em; }
+  .rec-card-title { font-weight:700;font-size:0.875rem;color:var(--navy);line-height:1.3;margin-bottom:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden; }
+  .rec-card-author { font-size:0.75rem;color:var(--gray-400);margin-bottom:0.625rem; }
+  .rec-card-footer { display:flex;justify-content:space-between;align-items:flex-end;gap:0.5rem; }
+  .rec-card-price { font-weight:800;font-size:1rem;color:var(--blue-mid);font-family:var(--font-display); }
+  .rec-stock-ok { font-size:0.68rem;color:var(--success); }
+  .rec-stock-low { font-size:0.68rem;color:var(--warning); }
+  .rec-stock-none { font-size:0.68rem;color:var(--danger); }
+  .rec-buy-btn { background:var(--blue-mid);color:white;border:none;padding:6px 12px;border-radius:var(--radius-sm);font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:background 0.15s; }
+  .rec-buy-btn:hover { background:#1d4ed8; }
+  .rec-buy-disabled { background:var(--gray-200);color:var(--gray-400);cursor:not-allowed; }
+
+  /* MODAL reuse from catalog */
+  .buy-modal-overlay { position:fixed;inset:0;background:rgba(13,27,46,0.65);backdrop-filter:blur(4px);z-index:8000;align-items:center;justify-content:center;padding:1rem; }
+  .buy-modal-box { background:white;border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);width:100%;max-width:420px; }
+  .buy-modal-header { display:flex;justify-content:space-between;align-items:center;padding:1.25rem 1.5rem 0.875rem;border-bottom:1px solid var(--gray-100); }
+  .buy-modal-title { font-family:var(--font-display);font-size:1.1rem;font-weight:700;color:var(--navy); }
+  .buy-modal-close { background:var(--gray-100);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:0.75rem; }
+  .buy-modal-body { padding:1.25rem 1.5rem; }
+  .buy-modal-footer { padding:0.875rem 1.5rem 1.25rem;display:flex;justify-content:flex-end;gap:0.75rem;border-top:1px solid var(--gray-100); }
+  .buy-book-info-card { display:flex;gap:0.875rem;align-items:center;padding:0.875rem;background:var(--gray-50);border-radius:var(--radius-sm);margin-bottom:1rem; }
+  .buy-book-thumb { width:48px;height:64px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex-shrink:0; }
+  .buy-qty-wrap { margin-bottom:0.875rem; }
+  .qty-control { display:flex;align-items:center;gap:0.5rem;margin-top:0.375rem; }
+  .qty-btn { width:36px;height:36px;border:1.5px solid var(--gray-200);border-radius:8px;background:white;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center; }
+  .qty-btn:hover { border-color:var(--blue-mid); }
+  .qty-input { width:64px;text-align:center;border:1.5px solid var(--gray-200);border-radius:8px;padding:0.4rem;font-size:1rem;font-weight:700; }
+  .buy-total-row { display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;background:var(--blue-ghost);border-radius:var(--radius-sm);border:1.5px solid var(--blue-pale); }
+  .buy-total-amount { font-family:var(--font-display);font-size:1.4rem;font-weight:700;color:var(--blue-mid); }
+  .buy-section-title { font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--gray-400);margin:0.875rem 0 0.5rem; }
+  .pay-method-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;margin-bottom:0.75rem; }
+  .pay-method-opt { cursor:pointer; }
+  .pay-method-opt input { display:none; }
+  .pay-method-card { display:flex;align-items:center;justify-content:center;padding:0.55rem;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:0.78rem;font-weight:600;transition:all 0.15s;background:white; }
+  .pay-method-opt input:checked + .pay-method-card { border-color:var(--blue-mid);background:var(--blue-ghost);color:var(--blue-mid); }
+  .card-fields-wrap { margin-bottom:0.5rem; }
+  /* SECTION HEADERS */
+  .sec-header { display:flex; align-items:center; gap:1rem; padding:1rem 1.5rem; border-radius:var(--radius); margin-bottom:1.25rem; border:1.5px solid; }
+  .sec-header-blue { background:linear-gradient(135deg,#eff6ff,#dbeafe); border-color:#93c5fd; }
+  .sec-header-fire { background:linear-gradient(135deg,#fff7ed,#fef3c7); border-color:#fde68a; }
+  .sec-header-icon { font-size:2rem; flex-shrink:0; }
+  .sec-header-title { font-family:var(--font-display); font-size:1.1rem; font-weight:700; color:var(--navy); margin-bottom:2px; }
+  .sec-header-sub { font-size:0.82rem; color:var(--gray-500); }
+
 </style>

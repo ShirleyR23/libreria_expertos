@@ -34,10 +34,24 @@ class Sale(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
-    # Relaciones ORM - Sin back_populates para evitar dependencias circulares
+    # Relaciones ORM
     items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
     invoice = relationship("Invoice", back_populates="sale", uselist=False)
-    
+    cliente = relationship("Client", foreign_keys=[cliente_id])
+    empleado = relationship("Employee", foreign_keys=[empleado_id])
+
+    @property
+    def cliente_nombre(self):
+        if self.cliente and self.cliente.user:
+            return self.cliente.user.nombre
+        return None
+
+    @property
+    def empleado_nombre(self):
+        if self.empleado and self.empleado.user:
+            return self.empleado.user.nombre
+        return None
+
     def __repr__(self) -> str:
         return f"<Sale(id={self.id}, tipo={self.tipo}, total={self.total})>"
 
@@ -56,7 +70,12 @@ class SaleItem(Base):
     # Relaciones
     sale = relationship("Sale", back_populates="items")
     book = relationship("Book", back_populates="sale_items")
-    
+
+    @property
+    def libro_nombre(self):
+        """Nombre del libro para la serialización del schema."""
+        return self.book.nombre if self.book else None
+
     def __repr__(self) -> str:
         return f"<SaleItem(id={self.id}, libro_id={self.libro_id}, cantidad={self.cantidad})>"
 

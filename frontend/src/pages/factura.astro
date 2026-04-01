@@ -1,0 +1,371 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
+if (!user) return Astro.redirect('/login');
+
+const saleId = Astro.url.searchParams.get('venta');
+---
+
+<DashboardLayout title="Factura" userRole={user.role_name}>
+  <div style="display:flex;justify-content:flex-end;gap:0.75rem;margin-bottom:1.25rem" class="no-print">
+    <button onclick="history.back()" class="btn btn-secondary">← Volver</button>
+    <button onclick="window.print()" class="btn btn-primary">🖨️ Imprimir / Descargar PDF</button>
+  </div>
+
+  <div id="loadingArea" style="display:flex;flex-direction:column;align-items:center;padding:4rem;background:white;border-radius:12px">
+    <div class="loading-spinner"></div>
+    <p style="margin-top:1rem;color:#6b7280">Cargando factura…</p>
+  </div>
+  <div id="errorArea" style="display:none;padding:3rem;text-align:center;background:white;border-radius:12px">
+    <p id="errorMsg" style="color:#dc2626;font-weight:600"></p>
+  </div>
+
+  <!-- INVOICE PAPER -->
+  <div id="invoicePaper" style="display:none">
+    <div class="invoice-wrap">
+
+      <!-- WATERMARK BACKGROUND -->
+      <div class="invoice-watermark">📚</div>
+
+      <!-- HEADER MEMBRETE -->
+      <div class="inv-header">
+        <div class="inv-brand-block">
+          <div class="inv-logo">📚</div>
+          <div>
+            <div class="inv-company-name">Librería El Saber</div>
+            <div class="inv-company-sub">Tu mundo de libros, en un solo lugar</div>
+            <div class="inv-company-detail">Tegucigalpa, Honduras · Tel: (504) 2222-3333</div>
+            <div class="inv-company-detail">correo@libreriasaber.hn · www.libreriasaber.hn</div>
+          </div>
+        </div>
+        <div class="inv-title-block">
+          <div class="inv-title-label">FACTURA</div>
+          <div class="inv-numero" id="invNumero">—</div>
+          <div class="inv-estado" id="invEstado">EMITIDA</div>
+        </div>
+      </div>
+
+      <!-- SAR BAND -->
+      <div class="sar-band">
+        <div class="sar-item"><span class="sar-lbl">RTN Emisor:</span><span id="invRtn" class="sar-val">—</span></div>
+        <div class="sar-item"><span class="sar-lbl">CAI:</span><span class="sar-val">A4B7C2-D1E8F3-9G0H5I-J2K6L1-M3N7O4-P5</span></div>
+        <div class="sar-item"><span class="sar-lbl">Límite Emisión:</span><span id="invLimite" class="sar-val">—</span></div>
+        <div class="sar-item"><span class="sar-lbl">Orden de Compra Exenta:</span><span class="sar-val">N/A</span></div>
+      </div>
+
+      <!-- DATOS FACTURA -->
+      <div class="inv-meta-grid">
+        <div class="inv-meta-box">
+          <div class="inv-meta-title">DATOS DEL CLIENTE</div>
+          <div class="inv-meta-row"><span class="inv-meta-lbl">Nombre:</span><span id="invCliente" class="inv-meta-val">—</span></div>
+          <div class="inv-meta-row"><span class="inv-meta-lbl">RTN:</span><span id="invRtnCliente" class="inv-meta-val">—</span></div>
+        </div>
+        <div class="inv-meta-box">
+          <div class="inv-meta-title">DATOS DE LA VENTA</div>
+          <div class="inv-meta-row"><span class="inv-meta-lbl">Fecha Emisión:</span><span id="invFecha" class="inv-meta-val">—</span></div>
+          <div class="inv-meta-row"><span class="inv-meta-lbl">Tipo de Venta:</span><span id="invTipo" class="inv-meta-val">—</span></div>
+          <div class="inv-meta-row"><span class="inv-meta-lbl">Atendido por:</span><span id="invEmpleado" class="inv-meta-val">—</span></div>
+        </div>
+      </div>
+
+      <!-- ITEMS TABLE -->
+      <table class="inv-items-table">
+        <thead>
+          <tr>
+            <th class="col-desc">DESCRIPCIÓN</th>
+            <th class="col-qty">CANT.</th>
+            <th class="col-price">PRECIO UNIT.</th>
+            <th class="col-sub">SUBTOTAL</th>
+          </tr>
+        </thead>
+        <tbody id="invItems"></tbody>
+      </table>
+
+      <!-- TOTALS -->
+      <div class="inv-totals-wrap">
+        <div class="inv-totals">
+          <div class="inv-total-row"><span>Subtotal (sin ISV):</span><span id="invSubtotal">L 0.00</span></div>
+          <div class="inv-total-row isv-row"><span>ISV 15%:</span><span id="invIsv">L 0.00</span></div>
+          <div class="inv-total-row discount-row"><span>Descuento:</span><span>L 0.00</span></div>
+          <div class="inv-total-row total-row"><span>TOTAL A PAGAR:</span><span id="invTotal">L 0.00</span></div>
+        </div>
+      </div>
+
+      <!-- NOTAS -->
+      <div id="invNotasWrap" style="display:none" class="inv-notas">
+        <strong>Notas:</strong> <span id="invNotas"></span>
+      </div>
+
+      <!-- FOOTER SAR -->
+      <div class="inv-footer">
+        <div class="inv-footer-left">
+          <p>La presente factura cumple con los requisitos establecidos por el SAR (Servicio de Administración de Rentas) de Honduras.</p>
+          <p>Resolución Autorización Imprenta: 0042-2024 · Rango Autorizado: 00000001 al 00050000</p>
+        </div>
+        <div class="inv-footer-right">
+          <div class="inv-firma-line"></div>
+          <div class="inv-firma-lbl">Firma Autorizada</div>
+          <div class="inv-firma-name">Librería El Saber</div>
+        </div>
+      </div>
+
+      <!-- BOTTOM STRIP -->
+      <div class="inv-bottom-strip">
+        <span>📚 Librería El Saber — Tu mundo de libros, en un solo lugar · Tegucigalpa, Honduras</span>
+      </div>
+
+    </div>
+  </div>
+</DashboardLayout>
+
+<script is:inline>
+  const API = 'http://localhost:8000/api/v1';
+  const token = localStorage.getItem('token');
+  const saleId = new URLSearchParams(window.location.search).get('venta');
+
+  async function loadInvoice() {
+    if (!saleId) {
+      document.getElementById('loadingArea').style.display = 'none';
+      document.getElementById('errorMsg').textContent = 'No se especificó un ID de venta.';
+      document.getElementById('errorArea').style.display = 'block';
+      return;
+    }
+    try {
+      const r = await fetch(API + '/sales/' + saleId + '/invoice', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.detail || 'Error al cargar la factura');
+      }
+      const inv = await r.json();
+      renderInvoice(inv);
+    } catch(e) {
+      document.getElementById('loadingArea').style.display = 'none';
+      document.getElementById('errorMsg').textContent = e.message;
+      document.getElementById('errorArea').style.display = 'block';
+    }
+  }
+
+  function fmt(n) { return 'L ' + parseFloat(n).toFixed(2); }
+
+  function renderInvoice(inv) {
+    document.getElementById('loadingArea').style.display = 'none';
+    document.getElementById('invNumero').textContent = inv.numero_factura;
+    document.getElementById('invEstado').textContent = inv.estado;
+    document.getElementById('invEstado').className = 'inv-estado ' + (inv.estado === 'EMITIDA' ? 'estado-emitida' : 'estado-anulada');
+    document.getElementById('invRtn').textContent = inv.rtn_emisor;
+    document.getElementById('invCliente').textContent = inv.nombre_cliente || 'Consumidor Final';
+    document.getElementById('invRtnCliente').textContent = inv.rtn_cliente || 'N/A';
+    document.getElementById('invEmpleado').textContent = inv.empleado_nombre || 'Sistema en línea';
+    document.getElementById('invTipo').textContent = inv.tipo === 'ONLINE' ? 'Venta en línea' : 'Venta presencial';
+
+    const fecha = new Date(inv.fecha_emision);
+    document.getElementById('invFecha').textContent = fecha.toLocaleDateString('es-HN', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' });
+
+    // Límite emisión = 1 año después
+    const limite = new Date(fecha);
+    limite.setFullYear(limite.getFullYear() + 1);
+    document.getElementById('invLimite').textContent = limite.toLocaleDateString('es-HN', { day:'2-digit', month:'long', year:'numeric' });
+
+    // Items
+    const tbody = document.getElementById('invItems');
+    tbody.innerHTML = inv.items.map(function(item, i) {
+      return '<tr class="' + (i % 2 === 0 ? 'row-even' : 'row-odd') + '">' +
+        '<td class="col-desc">' + item.libro_nombre + '</td>' +
+        '<td class="col-qty">' + item.cantidad + '</td>' +
+        '<td class="col-price">' + fmt(item.precio_unitario) + '</td>' +
+        '<td class="col-sub">' + fmt(item.subtotal) + '</td>' +
+        '</tr>';
+    }).join('');
+
+    document.getElementById('invSubtotal').textContent = fmt(inv.subtotal);
+    document.getElementById('invIsv').textContent = fmt(inv.impuesto);
+    document.getElementById('invTotal').textContent = fmt(inv.total);
+
+    if (inv.notas) {
+      document.getElementById('invNotas').textContent = inv.notas;
+      document.getElementById('invNotasWrap').style.display = 'block';
+    }
+
+    document.getElementById('invoicePaper').style.display = 'block';
+  }
+
+  loadInvoice();
+</script>
+
+<style>
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loading-spinner { width:44px;height:44px;border:3px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:spin 0.8s linear infinite; }
+
+  /* ── INVOICE WRAP ── */
+  .invoice-wrap {
+    position: relative;
+    background: white;
+    max-width: 800px;
+    margin: 0 auto;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    overflow: hidden;
+    font-family: 'Arial', sans-serif;
+    font-size: 0.875rem;
+    color: #1f2937;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+  }
+
+  /* Watermark */
+  .invoice-watermark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 18rem;
+    opacity: 0.03;
+    pointer-events: none;
+    z-index: 0;
+    user-select: none;
+  }
+
+  /* ── HEADER MEMBRETE ── */
+  .inv-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 1.75rem 2rem 1.25rem;
+    background: linear-gradient(135deg, #0d1b2e 0%, #1e3a6e 100%);
+    color: white;
+    position: relative;
+    z-index: 1;
+  }
+  .inv-brand-block { display:flex; gap:1rem; align-items:flex-start; }
+  .inv-logo { font-size:3rem; line-height:1; }
+  .inv-company-name { font-size:1.4rem; font-weight:800; letter-spacing:-0.02em; margin-bottom:2px; }
+  .inv-company-sub { font-size:0.8rem; color:rgba(255,255,255,0.65); margin-bottom:4px; font-style:italic; }
+  .inv-company-detail { font-size:0.75rem; color:rgba(255,255,255,0.55); line-height:1.6; }
+
+  .inv-title-block { text-align:right; }
+  .inv-title-label { font-size:0.65rem; letter-spacing:0.15em; color:rgba(255,255,255,0.5); text-transform:uppercase; margin-bottom:4px; }
+  .inv-numero { font-size:1.1rem; font-weight:700; font-family:monospace; color:#f59e0b; }
+  .inv-estado { display:inline-block; margin-top:6px; padding:3px 10px; border-radius:999px; font-size:0.7rem; font-weight:700; letter-spacing:0.08em; }
+  .estado-emitida { background:rgba(34,197,94,0.2); color:#86efac; border:1px solid rgba(34,197,94,0.3); }
+  .estado-anulada { background:rgba(239,68,68,0.2); color:#fca5a5; border:1px solid rgba(239,68,68,0.3); }
+
+  /* ── SAR BAND ── */
+  .sar-band {
+    background: #1e3a6e;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding: 0.6rem 2rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 2rem;
+    position: relative;
+    z-index: 1;
+  }
+  .sar-item { display:flex; gap:0.4rem; align-items:center; }
+  .sar-lbl { font-size:0.68rem; color:rgba(255,255,255,0.5); text-transform:uppercase; letter-spacing:0.05em; }
+  .sar-val { font-size:0.72rem; color:rgba(255,255,255,0.85); font-family:monospace; font-weight:600; }
+
+  /* ── META GRID ── */
+  .inv-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border-bottom: 2px solid #e5e7eb;
+    position: relative;
+    z-index: 1;
+  }
+  .inv-meta-box { padding: 1rem 2rem; }
+  .inv-meta-box:first-child { border-right: 1px solid #e5e7eb; }
+  .inv-meta-title { font-size:0.65rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#6b7280; margin-bottom:0.6rem; padding-bottom:0.4rem; border-bottom:2px solid #f3f4f6; }
+  .inv-meta-row { display:flex; gap:0.5rem; margin-bottom:0.35rem; }
+  .inv-meta-lbl { font-size:0.78rem; color:#6b7280; min-width:110px; flex-shrink:0; }
+  .inv-meta-val { font-size:0.8rem; font-weight:600; color:#1f2937; }
+
+  /* ── ITEMS TABLE ── */
+  .inv-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    position: relative;
+    z-index: 1;
+  }
+  .inv-items-table thead tr {
+    background: #f3f4f6;
+    border-bottom: 2px solid #d1d5db;
+  }
+  .inv-items-table th {
+    padding: 0.6rem 1rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #4b5563;
+    text-align: left;
+  }
+  .inv-items-table td { padding: 0.6rem 1rem; font-size: 0.82rem; border-bottom: 1px solid #f3f4f6; }
+  .row-even td { background: white; }
+  .row-odd td { background: #f9fafb; }
+  .col-desc { width: 50%; }
+  .col-qty, .col-price, .col-sub { text-align: right; }
+
+  /* ── TOTALS ── */
+  .inv-totals-wrap {
+    display: flex;
+    justify-content: flex-end;
+    padding: 1rem 2rem;
+    border-top: 2px solid #e5e7eb;
+    position: relative;
+    z-index: 1;
+  }
+  .inv-totals { width: 280px; }
+  .inv-total-row { display:flex; justify-content:space-between; padding:0.3rem 0; font-size:0.85rem; color:#374151; }
+  .isv-row { color:#6b7280; }
+  .discount-row { color:#6b7280; }
+  .total-row {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 2px solid #1e3a6e;
+    font-size: 1rem;
+    font-weight: 800;
+    color: #0d1b2e;
+  }
+
+  /* ── NOTAS ── */
+  .inv-notas { padding:0.75rem 2rem; background:#fffbeb; border-top:1px solid #fde68a; font-size:0.8rem; color:#92400e; position:relative;z-index:1; }
+
+  /* ── FOOTER ── */
+  .inv-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 1.25rem 2rem 1rem;
+    border-top: 2px solid #e5e7eb;
+    position: relative;
+    z-index: 1;
+  }
+  .inv-footer-left { max-width: 65%; }
+  .inv-footer-left p { font-size: 0.68rem; color: #9ca3af; line-height: 1.5; margin-bottom: 2px; }
+  .inv-footer-right { text-align:center; }
+  .inv-firma-line { width:120px; border-top:1.5px solid #374151; margin-bottom:4px; }
+  .inv-firma-lbl { font-size:0.68rem; color:#6b7280; }
+  .inv-firma-name { font-size:0.75rem; font-weight:700; color:#1f2937; }
+
+  /* ── BOTTOM STRIP ── */
+  .inv-bottom-strip {
+    background: linear-gradient(135deg, #0d1b2e, #1e3a6e);
+    color: rgba(255,255,255,0.6);
+    font-size: 0.7rem;
+    text-align: center;
+    padding: 0.5rem;
+    letter-spacing: 0.03em;
+  }
+
+  /* ── PRINT ── */
+  @media print {
+    .no-print { display: none !important; }
+    body, html { background: white !important; }
+    .invoice-wrap { box-shadow: none !important; border: none !important; max-width: 100% !important; }
+  }
+</style>

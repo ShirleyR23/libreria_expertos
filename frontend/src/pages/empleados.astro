@@ -1,90 +1,76 @@
 ---
-// Página de gestión de empleados (solo admin)
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import TableComponent from '../components/TableComponent.astro';
 
-// Verificar que sea admin
 const userStr = Astro.cookies.get('user')?.value;
 let user = null;
-try {
-  user = userStr ? JSON.parse(userStr) : null;
-} catch (e) {}
-
-if (!user || user.role_name !== 'ADMIN') {
-  return Astro.redirect('/login');
-}
-
-const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-
-// Obtener empleados
-let employees = [];
-try {
-  const response = await fetch(`${API_URL}/admin/employees`, {
-    headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
-  });
-  if (response.ok) {
-    employees = await response.json();
-  }
-} catch (e) {
-  console.error('Error al cargar empleados:', e);
-}
-
-const columns = [
-  { key: 'id', label: 'ID' },
-  { key: 'nombre', label: 'Nombre' },
-  { key: 'email', label: 'Email' },
-  { key: 'activo', label: 'Estado', format: 'badge' },
-  { key: 'created_at', label: 'Fecha Registro', format: 'date' },
-];
+try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
+if (!user || user.role_name !== 'ADMIN') return Astro.redirect('/login');
 ---
 
 <DashboardLayout title="Gestión de Empleados" userRole="ADMIN">
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">Empleados</h2>
-      <button id="addEmployeeBtn" class="btn btn-primary">+ Nuevo Empleado</button>
+  <div class="v-toolbar">
+    <div class="inv-search-wrap">
+      <span class="inv-search-icon">🔍</span>
+      <input type="text" id="empSearch" class="inv-search" placeholder="Buscar empleado…">
     </div>
-    
-    <TableComponent 
-      columns={columns} 
-      data={employees}
-      emptyMessage="No hay empleados registrados"
-    />
+    <button id="addEmployeeBtn" class="btn btn-primary">＋ Nuevo Empleado</button>
   </div>
-  
-  <!-- Modal para nuevo empleado -->
-  <div id="employeeModal" class="modal" style="display: none;">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>Nuevo Empleado</h3>
-        <button class="modal-close">&times;</button>
+
+  <!-- STATS -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem">
+    <div class="inv-stat-card blue"><div class="inv-stat-num" id="statTotal">—</div><div class="inv-stat-lbl">Total empleados</div></div>
+    <div class="inv-stat-card green"><div class="inv-stat-num" id="statActivos">—</div><div class="inv-stat-lbl">Activos</div></div>
+    <div class="inv-stat-card orange"><div class="inv-stat-num" id="statInactivos">—</div><div class="inv-stat-lbl">Inactivos</div></div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="inv-table-card">
+    <div id="empLoading" class="table-loading-wrap">
+      <div class="loading-spinner"></div>
+      <p style="color:var(--gray-400);margin-top:0.75rem">Cargando empleados…</p>
+    </div>
+    <div id="empTableWrap" class="inv-table-wrap" style="display:none">
+      <table class="inv-table">
+        <thead>
+          <tr><th>#ID</th><th>Nombre</th><th>Email</th><th>Turno</th><th>Salario</th><th>Estado</th><th>Acciones</th></tr>
+        </thead>
+        <tbody id="empBody"></tbody>
+      </table>
+      <div id="empEmpty" class="empty-table-msg" style="display:none">No hay empleados registrados.</div>
+    </div>
+  </div>
+
+  <!-- MODAL -->
+  <div id="empModal" class="modal-overlay">
+    <div class="modal-box" style="max-height:92vh;overflow-y:auto">
+      <div class="sale-modal-header">
+        <div>
+          <div class="sale-modal-title" id="empModalTitle">Nuevo Empleado</div>
+          <div class="sale-modal-sub">Completa los datos del empleado</div>
+        </div>
+        <button id="closeEmpModal" class="modal-close-btn">✕</button>
       </div>
-      <form id="employeeForm">
-        <div class="form-row">
+      <div style="padding:1.25rem 1.75rem">
+        <input type="hidden" id="empId">
+        <div class="form-grid-2">
           <div class="form-group">
-            <label>Nombre Completo</label>
-            <input type="text" id="empNombre" class="form-input" required />
+            <label class="form-label">Nombre completo *</label>
+            <input type="text" id="empNombre" class="form-input" placeholder="Juan Pérez">
           </div>
           <div class="form-group">
-            <label>Email</label>
-            <input type="email" id="empEmail" class="form-input" required />
+            <label class="form-label">Email *</label>
+            <input type="email" id="empEmail" class="form-input" placeholder="juan@libreria.com">
           </div>
-        </div>
-        
-        <div class="form-row">
-          <div class="form-group">
-            <label>Contraseña</label>
-            <input type="password" id="empPassword" class="form-input" minlength="6" required />
+          <div class="form-group" id="passGroup">
+            <label class="form-label">Contraseña *</label>
+            <input type="password" id="empPassword" class="form-input" minlength="6" placeholder="Mínimo 6 caracteres">
           </div>
           <div class="form-group">
-            <label>Salario</label>
-            <input type="number" id="empSalario" class="form-input" step="0.01" required />
+            <label class="form-label">Salario (L)</label>
+            <input type="number" id="empSalario" class="form-input" step="0.01" placeholder="0.00">
           </div>
-        </div>
-        
-        <div class="form-row">
           <div class="form-group">
-            <label>Turno</label>
+            <label class="form-label">Turno</label>
             <select id="empTurno" class="form-input">
               <option value="Mañana">Mañana</option>
               <option value="Tarde">Tarde</option>
@@ -92,136 +78,217 @@ const columns = [
             </select>
           </div>
           <div class="form-group">
-            <label>Teléfono</label>
-            <input type="tel" id="empTelefono" class="form-input" />
+            <label class="form-label">Teléfono</label>
+            <input type="tel" id="empTelefono" class="form-input" placeholder="9999-9999">
           </div>
         </div>
-        
         <div class="form-group">
-          <label>Dirección</label>
-          <input type="text" id="empDireccion" class="form-input" />
+          <label class="form-label">Dirección</label>
+          <input type="text" id="empDireccion" class="form-input" placeholder="Dirección del empleado">
         </div>
-        
-        <button type="submit" class="btn btn-primary">Crear Empleado</button>
-      </form>
+      </div>
+      <div style="padding:1rem 1.75rem 1.5rem;display:flex;justify-content:flex-end;gap:0.75rem;border-top:1px solid var(--gray-100)">
+        <button id="cancelEmpBtn" class="btn btn-secondary">Cancelar</button>
+        <button id="saveEmpBtn" class="btn btn-primary">💾 Guardar empleado</button>
+      </div>
     </div>
   </div>
 </DashboardLayout>
 
-<script>
-  const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+<script is:inline>
+  const API = 'http://localhost:8000/api/v1';
   const token = localStorage.getItem('token');
-  
-  // Modal
-  const modal = document.getElementById('employeeModal');
-  document.getElementById('addEmployeeBtn')?.addEventListener('click', () => {
-    document.getElementById('employeeForm').reset();
-    modal.style.display = 'flex';
-  });
-  
-  document.querySelector('.modal-close')?.addEventListener('click', () => {
-    modal.style.display = 'none';
-  });
-  
-  // Form submit
-  document.getElementById('employeeForm')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const employeeData = {
-      nombre: document.getElementById('empNombre').value,
-      email: document.getElementById('empEmail').value,
-      password: document.getElementById('empPassword').value,
-      salario: parseFloat(document.getElementById('empSalario').value),
-      turno: document.getElementById('empTurno').value,
-      telefono: document.getElementById('empTelefono').value,
-      direccion: document.getElementById('empDireccion').value,
-    };
-    
+  let allEmployees = [];
+
+  // ── LOAD ─────────────────────────────────────────────────────
+  async function loadEmployees() {
+    document.getElementById('empLoading').style.display = 'flex';
+    document.getElementById('empTableWrap').style.display = 'none';
     try {
-      const response = await fetch(`${API_URL}/admin/employees`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(employeeData),
+      const r = await fetch(`${API}/admin/employees`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!r.ok) throw new Error();
+      allEmployees = await r.json();
+      renderEmployees(allEmployees);
+    } catch(e) {
+      document.getElementById('empLoading').innerHTML = '<p style="color:var(--danger);padding:2rem">Error al cargar. <button onclick="loadEmployees()" class="btn btn-secondary btn-sm">Reintentar</button></p>';
+    }
+  }
+
+  function renderEmployees(employees) {
+    document.getElementById('empLoading').style.display = 'none';
+    document.getElementById('empTableWrap').style.display = 'block';
+    document.getElementById('statTotal').textContent = employees.length;
+    document.getElementById('statActivos').textContent = employees.filter(e => e.activo !== false).length;
+    document.getElementById('statInactivos').textContent = employees.filter(e => e.activo === false).length;
+
+    const tbody = document.getElementById('empBody');
+    if (!employees.length) { tbody.innerHTML = ''; document.getElementById('empEmpty').style.display = 'block'; return; }
+    document.getElementById('empEmpty').style.display = 'none';
+    tbody.innerHTML = employees.map(e => {
+      const activo = e.activo !== false;
+      return `<tr>
+        <td><span class="sale-id">#${e.id}</span></td>
+        <td><strong>${e.nombre}</strong></td>
+        <td style="font-size:0.85rem;color:var(--gray-600)">${e.email}</td>
+        <td>${e.turno || '—'}</td>
+        <td>${e.salario ? 'L ' + parseFloat(e.salario).toFixed(2) : '—'}</td>
+        <td><span class="badge ${activo ? 'badge-success' : 'badge-danger'}">${activo ? 'Activo' : 'Inactivo'}</span></td>
+        <td>
+          <div class="inv-actions">
+            <button class="action-btn edit-btn" onclick="editEmployee(${e.id})" title="Editar">✏️</button>
+            <button class="action-btn del-btn" onclick="toggleEmployee(${e.id}, ${activo}, '${e.nombre.replace(/'/g, "\\'")}')" title="${activo ? 'Desactivar' : 'Activar'}">${activo ? '🔴' : '🟢'}</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── SEARCH ───────────────────────────────────────────────────
+  document.getElementById('empSearch')?.addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    if (!q) { renderEmployees(allEmployees); return; }
+    renderEmployees(allEmployees.filter(emp => `${emp.nombre} ${emp.email}`.toLowerCase().includes(q)));
+  });
+
+  // ── MODAL ────────────────────────────────────────────────────
+  const modal = document.getElementById('empModal');
+  function openModal(isEdit) {
+    document.getElementById('passGroup').style.display = isEdit ? 'none' : 'block';
+    modal.classList.add('show');
+  }
+  function closeModal() {
+    modal.classList.remove('show');
+    ['empId','empNombre','empEmail','empPassword','empSalario','empTelefono','empDireccion'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+  }
+
+  document.getElementById('addEmployeeBtn')?.addEventListener('click', () => {
+    document.getElementById('empModalTitle').textContent = 'Nuevo Empleado';
+    openModal(false);
+  });
+  document.getElementById('closeEmpModal')?.addEventListener('click', closeModal);
+  document.getElementById('cancelEmpBtn')?.addEventListener('click', closeModal);
+  modal?.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+  // ── SAVE ─────────────────────────────────────────────────────
+  document.getElementById('saveEmpBtn')?.addEventListener('click', async () => {
+    const id = document.getElementById('empId').value;
+    const nombre = document.getElementById('empNombre').value.trim();
+    const email = document.getElementById('empEmail').value.trim();
+    const password = document.getElementById('empPassword').value;
+    if (!nombre || !email) { Modal.error('Campos requeridos', 'Nombre y email son obligatorios.'); return; }
+    if (!id && !password) { Modal.error('Contraseña requerida', 'Ingresa una contraseña para el nuevo empleado.'); return; }
+
+    const data = {
+      nombre, email,
+      salario: parseFloat(document.getElementById('empSalario').value) || null,
+      turno: document.getElementById('empTurno').value,
+      telefono: document.getElementById('empTelefono').value.trim() || null,
+      direccion: document.getElementById('empDireccion').value.trim() || null,
+    };
+    if (!id) data.password = password;
+
+    const btn = document.getElementById('saveEmpBtn');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    try {
+      const url = id ? `${API}/admin/employees/${id}` : `${API}/admin/employees`;
+      const method = id ? 'PUT' : 'POST';
+      const r = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(data),
       });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Error al crear empleado');
-      }
-      
-      modal.style.display = 'none';
-      window.location.reload();
-    } catch (error) {
-      alert(error.message);
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Error al guardar'); }
+      closeModal();
+      Modal.success(id ? '¡Empleado actualizado!' : '¡Empleado creado!', `<strong>${nombre}</strong> fue guardado correctamente.`, () => loadEmployees());
+    } catch(e) {
+      Modal.error('Error', e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '💾 Guardar empleado';
     }
   });
+
+  // ── EDIT ─────────────────────────────────────────────────────
+  window.editEmployee = async (id) => {
+    try {
+      const r = await fetch(`${API}/admin/employees/${id}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!r.ok) throw new Error();
+      const e = await r.json();
+      document.getElementById('empId').value = e.id;
+      document.getElementById('empNombre').value = e.nombre;
+      document.getElementById('empEmail').value = e.email;
+      document.getElementById('empSalario').value = e.salario || '';
+      document.getElementById('empTurno').value = e.turno || 'Mañana';
+      document.getElementById('empTelefono').value = e.telefono || '';
+      document.getElementById('empDireccion').value = e.direccion || '';
+      document.getElementById('empModalTitle').textContent = 'Editar Empleado';
+      openModal(true);
+    } catch(e) { Modal.error('Error', 'No se pudo cargar el empleado.'); }
+  };
+
+  // ── TOGGLE ACTIVE ─────────────────────────────────────────────
+  window.toggleEmployee = (id, activo, nombre) => {
+    const action = activo ? 'desactivar' : 'activar';
+    Modal.confirm(
+      `¿${activo ? 'Desactivar' : 'Activar'} empleado?`,
+      `¿Deseas ${action} a <strong>${nombre}</strong>?`,
+      async () => {
+        try {
+          const r = await fetch(`${API}/admin/employees/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ activo: !activo })
+          });
+          if (!r.ok) throw new Error();
+          Modal.success('Actualizado', `Empleado ${action}do correctamente.`, () => loadEmployees());
+        } catch(e) { Modal.error('Error', `No se pudo ${action} el empleado.`); }
+      }
+    );
+  };
+
+  // ── INIT ─────────────────────────────────────────────────────
+  loadEmployees();
+  setInterval(loadEmployees, 30000);
 </script>
 
-<style>
-  .modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-  }
-  
-  .modal-content {
-    background: white;
-    border-radius: 12px;
-    width: 90%;
-    max-width: 600px;
-    max-height: 90vh;
-    overflow-y: auto;
-  }
-  
-  .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  
-  .modal-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-  }
-  
-  #employeeForm {
-    padding: 1.5rem;
-  }
-  
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
-  
-  .form-group {
-    margin-bottom: 1rem;
-  }
-  
-  .form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-  }
-  
-  .form-input {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-  }
+<style is:global>
+  .v-toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; gap:1rem; flex-wrap:wrap; }
+  .inv-search-wrap { position:relative; flex:1; max-width:380px; }
+  .inv-search-icon { position:absolute; left:0.875rem; top:50%; transform:translateY(-50%); }
+  .inv-search { width:100%; padding:0.6rem 0.875rem 0.6rem 2.5rem; border:2px solid var(--gray-200); border-radius:var(--radius-sm); font-family:inherit; font-size:0.9rem; }
+  .inv-search:focus { outline:none; border-color:var(--blue-mid); }
+  .inv-stat-card { padding:1.25rem 1.5rem; background:white; border-radius:var(--radius); border:1px solid rgba(13,27,46,0.06); box-shadow:0 4px 20px rgba(13,27,46,0.14); }
+  .inv-stat-num { font-size:1.75rem; font-weight:700; font-family:var(--font-display); }
+  .inv-stat-lbl { font-size:0.8rem; color:var(--gray-400); margin-top:2px; }
+  .inv-stat-card.blue .inv-stat-num { color:var(--blue-mid); }
+  .inv-stat-card.green .inv-stat-num { color:var(--success); }
+  .inv-stat-card.orange .inv-stat-num { color:var(--warning); }
+  .inv-table-card { background:white; border-radius:var(--radius); border:1px solid rgba(13,27,46,0.06); box-shadow:0 4px 20px rgba(13,27,46,0.14); overflow:hidden; }
+  .inv-table-wrap { overflow-x:auto; }
+  .inv-table { width:100%; border-collapse:collapse; }
+  .inv-table th { padding:0.875rem 1rem; text-align:left; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.07em; color:var(--gray-400); font-weight:600; background:var(--gray-50); border-bottom:1px solid var(--gray-200); }
+  .inv-table td { padding:0.75rem 1rem; border-bottom:1px solid var(--gray-100); vertical-align:middle; }
+  .inv-table tr:last-child td { border-bottom:none; }
+  .inv-table tbody tr:hover { background:var(--gray-50); }
+  .sale-id { font-family:monospace; font-size:0.8rem; background:var(--gray-100); padding:2px 6px; border-radius:4px; color:var(--gray-600); }
+  .empty-table-msg { text-align:center; padding:3rem; color:var(--gray-400); }
+  .table-loading-wrap { display:flex; align-items:center; justify-content:center; padding:4rem 2rem; flex-direction:column; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loading-spinner { width:44px; height:44px; border:3px solid var(--gray-200); border-top-color:var(--blue-mid); border-radius:50%; animation:spin 0.8s linear infinite; }
+  .inv-actions { display:flex; gap:0.4rem; }
+  .action-btn { width:32px; height:32px; border-radius:6px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.9rem; transition:all 0.15s; }
+  .edit-btn { background:#eff6ff; } .edit-btn:hover { background:#dbeafe; }
+  .del-btn { background:#f8fafc; } .del-btn:hover { background:#f1f5f9; }
+  /* MODAL */
+  .modal-overlay { position:fixed; inset:0; background:rgba(13,27,46,0.65); backdrop-filter:blur(4px); z-index:9000; display:none; align-items:center; justify-content:center; padding:1rem; }
+  .modal-overlay.show { display:flex; }
+  .modal-box { background:white; border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); width:100%; max-width:560px; }
+  .sale-modal-header { display:flex; justify-content:space-between; align-items:center; padding:1.5rem 1.75rem 1rem; border-bottom:1px solid var(--gray-100); }
+  .sale-modal-title { font-family:var(--font-display); font-size:1.3rem; font-weight:700; color:var(--navy); }
+  .sale-modal-sub { font-size:0.85rem; color:var(--gray-400); margin-top:2px; }
+  .modal-close-btn { width:32px; height:32px; border-radius:50%; border:none; background:var(--gray-100); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.8rem; }
+  .modal-close-btn:hover { background:var(--gray-200); }
+  .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:0 1rem; }
+  @media(max-width:600px) { .form-grid-2 { grid-template-columns:1fr; } }
 </style>

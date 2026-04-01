@@ -123,6 +123,7 @@ CREATE TABLE libros (
     stock_minimo INTEGER DEFAULT 5,
     
     -- Campos para sistema experto
+    precio_original NUMERIC(10, 2),  -- Precio antes de descuento (NULL = sin descuento activo)
     es_bestseller BOOLEAN DEFAULT FALSE,
     total_ventas INTEGER DEFAULT 0,
     ventas_ultimos_30_dias INTEGER DEFAULT 0,

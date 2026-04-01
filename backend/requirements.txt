@@ -19,3 +19,7 @@ email-validator==2.2.0
 
 # Utilidades
 python-dotenv==1.0.1
+aiofiles>=23.0.0
+
+#pdf
+pypdf>=4.0.0

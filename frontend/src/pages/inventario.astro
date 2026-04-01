@@ -1,101 +1,189 @@
 ---
-// Página de gestión de inventario
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import TableComponent from '../components/TableComponent.astro';
 
-// Verificar que sea empleado o admin
 const userStr = Astro.cookies.get('user')?.value;
 let user = null;
-try {
-  user = userStr ? JSON.parse(userStr) : null;
-} catch (e) {}
-
-if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) {
-  return Astro.redirect('/login');
-}
-
+try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
+if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) return Astro.redirect('/login');
 const isAdmin = user.role_name === 'ADMIN';
-
-const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-
-// Obtener inventario
-let books = [];
-try {
-  const response = await fetch(`${API_URL}/books/inventory/all`, {
-    headers: { 'Authorization': `Bearer ${Astro.cookies.get('token')?.value}` }
-  });
-  if (response.ok) {
-    books = await response.json();
-  }
-} catch (e) {
-  console.error('Error al cargar inventario:', e);
-}
-
-const columns = [
-  { key: 'id', label: 'ID' },
-  { key: 'nombre', label: 'Nombre' },
-  { key: 'autor', label: 'Autor' },
-  { key: 'isbn', label: 'ISBN' },
-  { key: 'stock', label: 'Stock' },
-  { key: 'precio', label: 'Precio', format: 'currency' },
-  { key: 'es_bestseller', label: 'Bestseller', format: 'badge' },
-];
 ---
 
 <DashboardLayout title="Inventario" userRole={user.role_name}>
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">Gestión de Inventario</h2>
-      {isAdmin && (
-        <button id="addBookBtn" class="btn btn-primary">+ Nuevo Libro</button>
-      )}
+  <!-- TOOLBAR -->
+  <div class="inv-toolbar">
+    <div class="inv-search-wrap">
+      <span class="inv-search-icon">🔍</span>
+      <input type="text" id="invSearch" class="inv-search" placeholder="Buscar libro, autor o ISBN…">
     </div>
-    
-    <TableComponent 
-      columns={columns} 
-      data={books}
-      emptyMessage="No hay libros en el inventario"
-      actions={isAdmin}
-    >
-    </TableComponent>
+    {isAdmin && (
+      <button id="addBookBtn" class="btn btn-primary">＋ Nuevo Libro</button>
+    )}
   </div>
-  
+
+  <!-- STATS (se llenan vía JS) -->
+  <div class="inv-stats">
+    <div class="inv-stat-card blue">
+      <div class="inv-stat-icon">📚</div>
+      <div class="inv-stat-num" id="statTotal">
+        <span class="skeleton" style="display:inline-block;width:40px;height:28px;border-radius:4px"></span>
+      </div>
+      <div class="inv-stat-lbl">Total libros</div>
+    </div>
+    <div class="inv-stat-card orange">
+      <div class="inv-stat-icon">⚠️</div>
+      <div class="inv-stat-num" id="statLow">
+        <span class="skeleton" style="display:inline-block;width:40px;height:28px;border-radius:4px"></span>
+      </div>
+      <div class="inv-stat-lbl">Stock bajo</div>
+    </div>
+    <div class="inv-stat-card red">
+      <div class="inv-stat-icon">🚫</div>
+      <div class="inv-stat-num" id="statOut">
+        <span class="skeleton" style="display:inline-block;width:40px;height:28px;border-radius:4px"></span>
+      </div>
+      <div class="inv-stat-lbl">Sin stock</div>
+    </div>
+    <div class="inv-stat-card gold">
+      <div class="inv-stat-icon">⭐</div>
+      <div class="inv-stat-num" id="statBest">
+        <span class="skeleton" style="display:inline-block;width:40px;height:28px;border-radius:4px"></span>
+      </div>
+      <div class="inv-stat-lbl">Bestsellers</div>
+    </div>
+  </div>
+
+  <!-- TABLE CARD -->
+  <div class="inv-table-card">
+    <!-- Loading skeleton for table -->
+    <div id="tableSkeleton" class="table-loading-wrap">
+      <div class="table-loading-inner">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Cargando inventario…</p>
+      </div>
+    </div>
+
+    <!-- Actual table (hidden until loaded) -->
+    <div id="tableWrap" class="inv-table-wrap" style="display:none">
+      <table class="inv-table">
+        <thead>
+          <tr>
+            <th>Portada</th>
+            <th>Libro</th>
+            <th>ISBN</th>
+            <th>Categoría</th>
+            <th>Stock</th>
+            <th>Precio</th>
+            <th>Estado</th>
+            {isAdmin && <th>Acciones</th>}
+          </tr>
+        </thead>
+        <tbody id="invTableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Empty state -->
+    <div id="tableEmpty" class="table-empty-state" style="display:none">
+      <div style="font-size:3rem;margin-bottom:1rem">📭</div>
+      <div style="font-size:1.1rem;font-weight:600;color:var(--navy)">No hay libros en el inventario</div>
+      {isAdmin && <p style="color:var(--gray-400);margin-top:0.5rem">Agrega el primero con el botón "Nuevo Libro"</p>}
+    </div>
+
+    <!-- Error state -->
+    <div id="tableError" class="table-empty-state" style="display:none">
+      <div style="font-size:3rem;margin-bottom:1rem">⚠️</div>
+      <div style="font-size:1.1rem;font-weight:600;color:var(--navy)">Error al cargar el inventario</div>
+      <p style="color:var(--gray-400);margin-top:0.5rem">Verifica que el backend esté activo</p>
+      <button onclick="loadInventory()" class="btn btn-primary" style="margin-top:1rem">Reintentar</button>
+    </div>
+  </div>
+
+  <!-- BOOK MODAL (solo admin) -->
   {isAdmin && (
-    <div id="bookModal" class="modal" style="display: none;">
-      <div class="modal-content">
+    <div id="bookModal" class="modal-overlay">
+      <div class="modal-box modal-lg">
         <div class="modal-header">
-          <h3 id="modalTitle">Nuevo Libro</h3>
-          <button class="modal-close">&times;</button>
+          <div>
+            <div class="modal-title" id="modalTitle">Nuevo Libro</div>
+            <div class="modal-subtitle" id="modalSubtitle">Completa los datos del libro</div>
+          </div>
+          <button class="modal-close-btn" id="closeBookModal">✕</button>
         </div>
-        <form id="bookForm">
-          <input type="hidden" id="bookId" />
-          <div class="form-row">
-            <div class="form-group">
-              <label>Nombre</label>
-              <input type="text" id="bookNombre" class="form-input" required />
+
+        <div class="modal-body">
+          <input type="hidden" id="bookId">
+
+          <!-- IMAGE UPLOAD -->
+          <div class="img-upload-section">
+            <div class="img-preview-wrap" id="imgPreviewWrap">
+              <div class="img-preview-default" id="imgDefault">📖</div>
+              <img id="imgPreview" class="img-preview" style="display:none" alt="Preview">
             </div>
-            <div class="form-group">
-              <label>ISBN</label>
-              <input type="text" id="bookIsbn" class="form-input" required />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Autor</label>
-              <input type="text" id="bookAutor" class="form-input" required />
-            </div>
-            <div class="form-group">
-              <label>Precio</label>
-              <input type="number" id="bookPrecio" class="form-input" step="0.01" required />
+            <div class="img-upload-info">
+              <div class="img-upload-title">Portada del libro</div>
+              <div class="img-upload-desc">JPG, PNG o WebP · Máx. 5 MB</div>
+              <label for="bookImagen" class="btn btn-secondary btn-sm" style="cursor:pointer;display:inline-flex;margin-top:0.5rem">
+                📷 Subir imagen
+              </label>
+              <input type="file" id="bookImagen" accept="image/*" style="display:none">
+              <input type="hidden" id="bookImagenUrl">
             </div>
           </div>
-          <div class="form-row">
+
+          <!-- PDF UPLOAD -->
+          <div class="pdf-upload-section" id="pdfUploadSection">
+            <div class="pdf-upload-icon" id="pdfIcon">📄</div>
+            <div class="pdf-upload-info">
+              <div class="pdf-upload-title">PDF del libro <span class="pdf-upload-optional">(opcional)</span></div>
+              <div class="pdf-upload-desc" id="pdfUploadDesc">PDF · Máx. 50 MB · Los clientes podrán leerlo en línea</div>
+              <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.5rem;flex-wrap:wrap">
+                <label for="bookPdf" class="btn btn-secondary btn-sm" style="cursor:pointer;display:inline-flex" id="pdfUploadLabel">
+                  📤 Subir PDF
+                </label>
+                <input type="file" id="bookPdf" accept="application/pdf" style="display:none">
+                <div id="pdfPreviewPagesWrap" style="display:flex;align-items:center;gap:0.5rem">
+                  <label class="form-label" style="margin:0;font-size:0.78rem;white-space:nowrap">Páginas gratis:</label>
+                  <input type="number" id="bookPdfPages" class="form-input" min="1" max="20" value="3" style="width:60px;padding:4px 8px;font-size:0.85rem">
+                </div>
+              </div>
+              <div id="pdfStatusMsg" style="display:none;margin-top:0.4rem;font-size:0.78rem"></div>
+            </div>
+          </div>
+
+          <div class="form-grid-2">
             <div class="form-group">
-              <label>Stock</label>
-              <input type="number" id="bookStock" class="form-input" required />
+              <label class="form-label">Nombre *</label>
+              <input type="text" id="bookNombre" class="form-input" placeholder="Título del libro">
             </div>
             <div class="form-group">
-              <label>Categoría</label>
+              <label class="form-label">ISBN *</label>
+              <input type="text" id="bookIsbn" class="form-input" placeholder="0000000000">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Autor *</label>
+              <input type="text" id="bookAutor" class="form-input" placeholder="Nombre del autor">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Editorial</label>
+              <input type="text" id="bookEditorial" class="form-input" placeholder="Editorial">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Precio (L) *</label>
+              <input type="number" id="bookPrecio" class="form-input" step="0.01" min="0" placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Año de publicación</label>
+              <input type="number" id="bookAnio" class="form-input" min="1000" max="2100" placeholder="2024">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Stock inicial *</label>
+              <input type="number" id="bookStock" class="form-input" min="0" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Stock mínimo</label>
+              <input type="number" id="bookStockMin" class="form-input" min="0" value="5">
+            </div>
+            <div class="form-group" style="grid-column:1/-1">
+              <label class="form-label">Categoría *</label>
               <select id="bookCategoria" class="form-input">
                 <option value="1">Ficción</option>
                 <option value="2">No Ficción</option>
@@ -110,239 +198,487 @@ const columns = [
               </select>
             </div>
           </div>
+
           <div class="form-group">
-            <label>Descripción</label>
-            <textarea id="bookDescripcion" class="form-input" rows="3"></textarea>
+            <label class="form-label">Descripción</label>
+            <textarea id="bookDescripcion" class="form-input" rows="3" placeholder="Breve descripción del libro…"></textarea>
           </div>
 
-          <!-- Sección: Compra al Proveedor (solo para nuevos libros) -->
-          <div id="compraSection" class="compra-section">
-            <div class="section-title">Datos de Compra al Proveedor</div>
-            
-            <div class="form-row">
-              <div class="form-group">
-                <label>Nombre del Proveedor *</label>
-                <input type="text" id="provNombre" class="form-input" placeholder="Ej: Editorial XYZ" required />
-              </div>
-              <div class="form-group">
-                <label>Contacto</label>
-                <input type="text" id="provContacto" class="form-input" placeholder="Email de Contacto" />
-              </div>
-            </div>
-            
-            <div class="form-row">
-              <div class="form-group">
-                <label>Teléfono</label>
-                <input type="text" id="provTelefono" class="form-input" placeholder="Teléfono del proveedor" />
-              </div>
-              <div class="form-group">
-                <label>Cantidad Comprada *</label>
-                <input type="number" id="cantidadCompra" class="form-input" min="1" value="1" required />
-              </div>
-            </div>
-            
-            <div class="form-group">
-              <label>Costo Unitario de Compra *</label>
-              <input type="number" id="costoCompra" class="form-input" step="0.01" min="0" placeholder="Precio de compra" required />
-            </div>
-            
-            <div class="info-box">
-              <small>Al guardar, se creará automáticamente el registro de compra al proveedor y se actualizará el inventario.</small>
-            </div>
-          </div>
-          <button type="submit" class="btn btn-primary">Guardar</button>
-        </form>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancelBookBtn">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="saveBookBtn">
+            <span id="saveBtnText">💾 Guardar libro</span>
+          </button>
+        </div>
       </div>
     </div>
   )}
 </DashboardLayout>
 
-<script>
-  const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+<script is:inline define:vars={{ isAdmin }}>
+  const API_URL = (typeof window !== 'undefined' && window.__ENV_API_URL) || 'http://localhost:8000/api/v1';
   const token = localStorage.getItem('token');
-  
-  // Modal functionality
-  const modal = document.getElementById('bookModal');
-  const addBtn = document.getElementById('addBookBtn');
-  const closeBtn = document.querySelector('.modal-close');
-  const compraSection = document.getElementById('compraSection');
-  
-  addBtn?.addEventListener('click', () => {
-    document.getElementById('bookForm').reset();
-    document.getElementById('bookId').value = '';
-    document.getElementById('modalTitle').textContent = 'Nuevo Libro';
+  let allBooks = [];
 
-    // Mostrar sección de compra para nuevos libros
-    if (compraSection) compraSection.style.display = 'block';
-    
-    // Hacer campos de compra requeridos
-    document.getElementById('provNombre').required = true;
-    document.getElementById('cantidadCompra').required = true;
-    document.getElementById('costoCompra').required = true;
-    modal.style.display = 'flex';
+  // ============================================================
+  // CATEGORY CONFIG (colores e iconos por categoría)
+  // ============================================================
+  const CAT_CONFIG = {
+    'FICCION':     { color: '#7c3aed', bg: '#f5f3ff', icon: '🌙' },
+    'NO_FICCION':  { color: '#0891b2', bg: '#ecfeff', icon: '📰' },
+    'CIENCIA':     { color: '#16a34a', bg: '#f0fdf4', icon: '🔬' },
+    'TECNOLOGIA':  { color: '#2563eb', bg: '#eff6ff', icon: '💻' },
+    'HISTORIA':    { color: '#b45309', bg: '#fffbeb', icon: '🏛️' },
+    'ARTE':        { color: '#db2777', bg: '#fdf2f8', icon: '🎨' },
+    'LITERATURA':  { color: '#ea580c', bg: '#fff7ed', icon: '✒️' },
+    'INFANTIL':    { color: '#e11d48', bg: '#fff1f2', icon: '🦄' },
+    'ACADEMICO':   { color: '#4338ca', bg: '#eef2ff', icon: '🎓' },
+    'FILOSOFIA':   { color: '#475569', bg: '#f8fafc', icon: '🧠' },
+  };
+
+  function getCatConfig(catName) {
+    const key = (catName || '').toUpperCase().replace(/\s/g,'_').replace(/Ó/g,'O').replace(/Í/g,'I');
+    return CAT_CONFIG[key] || { color: '#1d4ed8', bg: '#eff6ff', icon: '📖' };
+  }
+
+  // ============================================================
+  // LOAD INVENTORY
+  // ============================================================
+  window.loadInventory = async function() {
+    showTableState('loading');
+    try {
+      const r = await fetch(`${API_URL}/books/inventory/all?limit=500`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      allBooks = await r.json();
+      updateStats();
+      renderTable();
+    } catch(e) {
+      console.error('Error cargando inventario:', e);
+      showTableState('error');
+    }
+  };
+
+  function updateStats() {
+    document.getElementById('statTotal').textContent = allBooks.length;
+    document.getElementById('statLow').textContent = allBooks.filter(b => b.stock > 0 && b.stock <= b.stock_minimo).length;
+    document.getElementById('statOut').textContent = allBooks.filter(b => b.stock === 0).length;
+    document.getElementById('statBest').textContent = allBooks.filter(b => b.es_bestseller).length;
+  }
+
+  function renderTable(books) {
+    books = books || allBooks;
+    const tbody = document.getElementById('invTableBody');
+    if (books.length === 0) { showTableState('empty'); return; }
+    showTableState('table');
+    tbody.innerHTML = books.map(book => {
+      const cat = book.categoria?.name || '';
+      const cfg = getCatConfig(cat);
+      const stockClass = book.stock === 0 ? 'stock-out' : book.stock <= book.stock_minimo ? 'stock-low' : 'stock-ok';
+      const thumb = book.imagen_url
+        ? `<img src="http://localhost:8000${book.imagen_url}" class="inv-thumb" loading="lazy" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
+        : '';
+      const thumbDefault = `<div class="inv-thumb-default" style="background:${cfg.bg};color:${cfg.color};${book.imagen_url?'display:none':''}">
+        <span style="font-size:1.5rem">${cfg.icon}</span>
+      </div>`;
+      const actionsHTML = isAdmin ? `
+        <td>
+          <div class="inv-actions">
+            <button class="action-btn edit-btn" onclick="editBook(${book.id})" title="Editar">✏️</button>
+            <button class="action-btn del-btn" onclick="deleteBook(${book.id}, '${book.nombre.replace(/'/g,"\\'")}')" title="Eliminar">🗑️</button>
+          </div>
+        </td>` : '';
+      const tagHtml = cat ? `<span class="cat-tag" style="background:${cfg.bg};color:${cfg.color}">${cfg.icon} ${cat}</span>` : '—';
+      let statusHtml = '';
+      if (book.es_bestseller) statusHtml += `<span class="badge-bs">⭐ Bestseller</span> `;
+      if (book.stock === 0) statusHtml += `<span class="badge-out-of-stock">Sin stock</span>`;
+      else if (!book.es_bestseller) statusHtml += `<span class="badge-ok">Activo</span>`;
+      return `<tr data-search="${(book.nombre+' '+book.autor+' '+book.isbn).toLowerCase()}">
+        <td><div class="inv-thumb-wrap">${thumb}${thumbDefault}</div></td>
+        <td>
+          <div class="inv-book-name">${book.nombre}</div>
+          <div class="inv-book-author">✍️ ${book.autor}</div>
+        </td>
+        <td><span class="inv-isbn">${book.isbn}</span></td>
+        <td>${tagHtml}</td>
+        <td><span class="stock-badge ${stockClass}">${book.stock}</span></td>
+        <td><strong class="inv-price">L ${parseFloat(book.precio).toFixed(2)}</strong></td>
+        <td>${statusHtml}</td>
+        ${actionsHTML}
+      </tr>`;
+    }).join('');
+  }
+
+  function showTableState(state) {
+    document.getElementById('tableSkeleton').style.display = state === 'loading' ? 'flex' : 'none';
+    document.getElementById('tableWrap').style.display = state === 'table' ? 'block' : 'none';
+    document.getElementById('tableEmpty').style.display = state === 'empty' ? 'flex' : 'none';
+    document.getElementById('tableError').style.display = state === 'error' ? 'flex' : 'none';
+  }
+
+  // ---- SEARCH ----
+  document.getElementById('invSearch')?.addEventListener('input', e => {
+    const q = e.target.value.toLowerCase().trim();
+    if (!q) { renderTable(allBooks); return; }
+    renderTable(allBooks.filter(b =>
+      (b.nombre + ' ' + b.autor + ' ' + b.isbn).toLowerCase().includes(q)
+    ));
   });
-  
-  closeBtn?.addEventListener('click', () => {
-    modal.style.display = 'none';
+
+  // ---- MODAL ----
+  const modal = document.getElementById('bookModal');
+  const openModal = () => { if (modal) modal.classList.add('show'); };
+  const closeModal = () => { if (modal) { modal.classList.remove('show'); resetForm(); } };
+
+  document.getElementById('addBookBtn')?.addEventListener('click', () => {
+    document.getElementById('modalTitle').textContent = 'Nuevo Libro';
+    document.getElementById('modalSubtitle').textContent = 'Completa los datos del libro';
+    openModal();
   });
-  
-  // Form submit
-  document.getElementById('bookForm')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
+  document.getElementById('closeBookModal')?.addEventListener('click', closeModal);
+  document.getElementById('cancelBookBtn')?.addEventListener('click', closeModal);
+  modal?.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+  function resetForm() {
+    ['bookId','bookNombre','bookIsbn','bookAutor','bookEditorial','bookPrecio','bookAnio',
+     'bookStock','bookDescripcion','bookImagenUrl','provNombre','provContacto','provTelefono','costoCompra'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    const sm = document.getElementById('bookStockMin'); if (sm) sm.value = '5';
+    const pp = document.getElementById('bookPdfPages'); if (pp) pp.value = '3';
+    document.getElementById('imgPreview').style.display = 'none';
+    document.getElementById('imgDefault').style.display = 'flex';
+    // Reset PDF section
+    document.getElementById('pdfIcon').textContent = '📄';
+    document.getElementById('pdfUploadDesc').textContent = 'PDF · Máx. 50 MB · Los clientes podrán leerlo en línea';
+    document.getElementById('pdfUploadLabel').textContent = '📤 Subir PDF';
+    document.getElementById('pdfStatusMsg').style.display = 'none';
+    document.getElementById('pdfStatusMsg').textContent = '';
+    if (document.getElementById('bookPdf')) document.getElementById('bookPdf').value = '';
+  }
+
+  // ---- IMAGE UPLOAD ----
+  document.getElementById('bookImagen')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      document.getElementById('imgPreview').src = ev.target.result;
+      document.getElementById('imgPreview').style.display = 'block';
+      document.getElementById('imgDefault').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const r = await fetch(`${API_URL}/books/upload-image`, {
+        method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData
+      });
+      if (!r.ok) throw new Error('Error al subir imagen');
+      const data = await r.json();
+      document.getElementById('bookImagenUrl').value = data.url;
+    } catch(err) {
+      Modal.error('Error de imagen', 'No se pudo subir la imagen. El libro se guardará sin portada.');
+    }
+  });
+
+  // ---- PDF UPLOAD (se puede hacer al crear O al editar) ----
+  document.getElementById('bookPdf')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const bookId = document.getElementById('bookId').value;
+    // If editing an existing book, upload immediately
+    if (bookId) {
+      const statusEl = document.getElementById('pdfStatusMsg');
+      const labelEl = document.getElementById('pdfUploadLabel');
+      statusEl.style.display = 'block';
+      statusEl.style.color = '#2563eb';
+      statusEl.textContent = '⏳ Subiendo PDF…';
+      labelEl.textContent = '⏳ Subiendo…';
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const r = await fetch(`${API_URL}/books/upload-pdf/${bookId}`, {
+          method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData
+        });
+        if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Error al subir PDF'); }
+        statusEl.style.color = '#16a34a';
+        statusEl.textContent = '✅ PDF subido correctamente';
+        document.getElementById('pdfIcon').textContent = '✅';
+        labelEl.textContent = '📤 Cambiar PDF';
+        const pages = parseInt(document.getElementById('bookPdfPages').value) || 3;
+        await fetch(`${API_URL}/books/${bookId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ pdf_preview_pages: pages })
+        });
+      } catch(err) {
+        statusEl.style.color = '#dc2626';
+        statusEl.textContent = '❌ ' + err.message;
+        labelEl.textContent = '📤 Subir PDF';
+        e.target.value = '';
+      }
+    } else {
+      // New book — just show file name, will be uploaded on save
+      const statusEl = document.getElementById('pdfStatusMsg');
+      statusEl.style.display = 'block';
+      statusEl.style.color = '#2563eb';
+      statusEl.textContent = `📄 "${file.name}" listo — se subirá al guardar el libro`;
+      document.getElementById('pdfIcon').textContent = '📄';
+      document.getElementById('pdfUploadLabel').textContent = '📄 ' + file.name.substring(0,22) + (file.name.length>22?'…':'');
+    }
+  });
+
+  // ---- SAVE ----
+  document.getElementById('saveBookBtn')?.addEventListener('click', async () => {
     const bookId = document.getElementById('bookId').value;
     const isNewBook = !bookId;
-    const bookData = {
-      nombre: document.getElementById('bookNombre').value,
-      isbn: document.getElementById('bookIsbn').value,
-      autor: document.getElementById('bookAutor').value,
-      precio: parseFloat(document.getElementById('bookPrecio').value),
-      stock: parseInt(document.getElementById('bookStock').value),
-      categoria_id: parseInt(document.getElementById('bookCategoria').value),
-      descripcion: document.getElementById('bookDescripcion').value,
-      // Nota: Si el backend requiere año de publicación, agrégalo aquí
-    };
-    
-    // Si es nuevo libro, agregar datos de compra
-    if (isNewBook) {
-      bookData.proveedor_nombre = document.getElementById('provNombre').value;
-      bookData.proveedor_contacto = document.getElementById('provContacto').value;
-      bookData.proveedor_telefono = document.getElementById('provTelefono').value;
-      bookData.cantidad_compra = parseInt(document.getElementById('cantidadCompra').value);
-      bookData.costo_compra = parseFloat(document.getElementById('costoCompra').value);
-      // No enviamos stock, el backend lo calcula desde la compra
-    } else {
-      // Si es edición, enviar stock actual
-      bookData.stock = parseInt(document.getElementById('bookStock').value);
+    const nombre = document.getElementById('bookNombre').value.trim();
+    const isbn = document.getElementById('bookIsbn').value.trim();
+    const autor = document.getElementById('bookAutor').value.trim();
+    const precio = parseFloat(document.getElementById('bookPrecio').value);
+    const stock = parseInt(document.getElementById('bookStock').value);
+    if (!nombre || !isbn || !autor || isNaN(precio)) {
+      Modal.error('Campos incompletos', 'Completa todos los campos obligatorios marcados con (*).');
+      return;
     }
-
+    if (isNaN(stock)) {
+      Modal.error('Campos incompletos', 'El campo Stock es obligatorio.');
+      return;
+    }
+    const pdfPages = parseInt(document.getElementById('bookPdfPages').value) || 3;
+    const bookData = {
+      nombre, isbn, autor, precio,
+      stock: stock || 0,
+      stock_minimo: parseInt(document.getElementById('bookStockMin').value) || 5,
+      categoria_id: parseInt(document.getElementById('bookCategoria').value),
+      editorial: document.getElementById('bookEditorial').value.trim() || null,
+      anio_publicacion: parseInt(document.getElementById('bookAnio').value) || null,
+      descripcion: document.getElementById('bookDescripcion').value.trim() || null,
+      imagen_url: document.getElementById('bookImagenUrl').value || null,
+      pdf_preview_pages: pdfPages,
+    };
+    const btn = document.getElementById('saveBookBtn');
+    btn.disabled = true;
+    document.getElementById('saveBtnText').textContent = 'Guardando…';
     try {
       const url = bookId ? `${API_URL}/books/${bookId}` : `${API_URL}/books/`;
       const method = bookId ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+      const r = await fetch(url, {
+        method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(bookData),
       });
-      
-      if (!response.ok) throw new Error('Error al guardar');
-      
-      modal.style.display = 'none';
-      window.location.reload();
-    } catch (error) {
-      alert(error.message);
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Error al guardar'); }
+      const savedBook = await r.json();
+      const newBookId = savedBook.id || bookId;
+
+      // ── Upload PDF if one was selected ──────────────────────────────
+      const pdfFile = document.getElementById('bookPdf')?.files?.[0];
+      if (pdfFile && newBookId) {
+        document.getElementById('saveBtnText').textContent = 'Subiendo PDF…';
+        const formData = new FormData();
+        formData.append('file', pdfFile);
+        const pdfR = await fetch(`${API_URL}/books/upload-pdf/${newBookId}`, {
+          method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData
+        });
+        if (!pdfR.ok) {
+          const pd = await pdfR.json();
+          // Book saved OK but PDF failed — warn but don't block
+          closeModal();
+          Modal.warning('Libro guardado, PDF falló', `El libro fue guardado pero no se pudo subir el PDF: ${pd.detail || 'Error desconocido'}. Puedes subirlo editando el libro.`, () => loadInventory());
+          return;
+        }
+      }
+
+      closeModal();
+      const msg = isNewBook
+        ? `<strong>${nombre}</strong> fue agregado correctamente.${pdfFile ? ' El PDF también fue cargado.' : ''}`
+        : `<strong>${nombre}</strong> fue actualizado correctamente.`;
+      Modal.success(bookId ? '¡Libro actualizado!' : '¡Libro creado!', msg, () => loadInventory());
+    } catch(err) {
+      Modal.error('Error al guardar', err.message);
+    } finally {
+      btn.disabled = false;
+      document.getElementById('saveBtnText').textContent = '💾 Guardar libro';
     }
   });
-  
-  // Global functions for edit/delete
+
+  // ---- EDIT ----
   window.editBook = async (id) => {
     try {
-      const response = await fetch(`${API_URL}/books/${id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const book = await response.json();
-      
+      const r = await fetch(`${API_URL}/books/${id}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!r.ok) throw new Error();
+      const book = await r.json();
       document.getElementById('bookId').value = book.id;
       document.getElementById('bookNombre').value = book.nombre;
       document.getElementById('bookIsbn').value = book.isbn;
       document.getElementById('bookAutor').value = book.autor;
+      document.getElementById('bookEditorial').value = book.editorial || '';
       document.getElementById('bookPrecio').value = book.precio;
+      document.getElementById('bookAnio').value = book.anio_publicacion || '';
       document.getElementById('bookStock').value = book.stock;
+      document.getElementById('bookStockMin').value = book.stock_minimo;
       document.getElementById('bookCategoria').value = book.categoria_id;
       document.getElementById('bookDescripcion').value = book.descripcion || '';
-      
-      // Ocultar sección de compra en edición
-      if (compraSection) compraSection.style.display = 'none';
+      document.getElementById('bookImagenUrl').value = book.imagen_url || '';
+      document.getElementById('bookPdfPages').value = book.pdf_preview_pages || 3;
+      if (book.imagen_url) {
+        document.getElementById('imgPreview').src = `http://localhost:8000${book.imagen_url}`;
+        document.getElementById('imgPreview').style.display = 'block';
+        document.getElementById('imgDefault').style.display = 'none';
+      } else {
+        document.getElementById('imgPreview').style.display = 'none';
+        document.getElementById('imgDefault').style.display = 'flex';
+      }
+      // Show PDF status
+      const statusEl = document.getElementById('pdfStatusMsg');
+      if (book.has_pdf) {
+        document.getElementById('pdfIcon').textContent = '✅';
+        document.getElementById('pdfUploadDesc').textContent = 'PDF cargado — los clientes pueden leerlo en línea';
+        document.getElementById('pdfUploadLabel').textContent = '📤 Reemplazar PDF';
+        statusEl.style.display = 'block';
+        statusEl.style.color = '#16a34a';
+        statusEl.textContent = '✅ Este libro ya tiene PDF disponible';
+      } else {
+        document.getElementById('pdfIcon').textContent = '📄';
+        document.getElementById('pdfUploadDesc').textContent = 'PDF · Máx. 50 MB · Los clientes podrán leerlo en línea';
+        document.getElementById('pdfUploadLabel').textContent = '📤 Subir PDF';
+        statusEl.style.display = 'none';
+      }
       document.getElementById('modalTitle').textContent = 'Editar Libro';
-      modal.style.display = 'flex';
-    } catch (error) {
-      alert('Error al cargar el libro');
+      document.getElementById('modalSubtitle').textContent = book.nombre;
+      openModal();
+    } catch(e) {
+      Modal.error('Error', 'No se pudo cargar el libro.');
     }
   };
-  
-  window.deleteBook = async (id) => {
-    if (!confirm('¿Estás seguro de eliminar este libro?')) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/books/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (!response.ok) throw new Error('Error al eliminar');
-      window.location.reload();
-    } catch (error) {
-      alert(error.message);
-    }
+
+  // ---- DELETE ----
+  window.deleteBook = (id, nombre) => {
+    Modal.confirm('¿Eliminar libro?',
+      `¿Deseas eliminar <strong>${nombre}</strong>? Esta acción no se puede deshacer.`,
+      async () => {
+        try {
+          const r = await fetch(`${API_URL}/books/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+          if (!r.ok) throw new Error('Error al eliminar');
+          Modal.success('Libro eliminado', `<strong>${nombre}</strong> fue eliminado del inventario.`, () => loadInventory());
+        } catch(e) {
+          Modal.error('Error al eliminar', e.message);
+        }
+      }
+    );
   };
+
+  // ---- INIT: cargar al abrir la página ----
+  loadInventory();
+  setInterval(loadInventory, 30000);
 </script>
 
 <style>
-  .modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-  }
-  
-  .modal-content {
-    background: white;
-    border-radius: 12px;
-    width: 90%;
-    max-width: 600px;
-    max-height: 90vh;
-    overflow-y: auto;
-  }
-  
-  .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  
-  .modal-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-  }
-  
-  #bookForm {
-    padding: 1.5rem;
-  }
-  
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
-  
-  .form-group {
-    margin-bottom: 1rem;
-  }
-  
-  .form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-  }
-  
-  .form-input {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-  }
+  /* TOOLBAR */
+  .inv-toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; gap:1rem; flex-wrap:wrap; }
+  .inv-search-wrap { position:relative; flex:1; max-width:420px; }
+  .inv-search-icon { position:absolute; left:0.875rem; top:50%; transform:translateY(-50%); }
+  .inv-search { width:100%; padding:0.65rem 0.875rem 0.65rem 2.5rem; border:2px solid var(--gray-200); border-radius:var(--radius-sm); font-family:inherit; font-size:0.9rem; background:white; transition:border-color 0.2s; }
+  .inv-search:focus { outline:none; border-color:var(--blue-mid); }
+
+  /* STATS */
+  .inv-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
+  .inv-stat-card { background:white; border-radius:var(--radius); padding:1.25rem 1.5rem; border:1px solid rgba(13,27,46,0.06); box-shadow:0 4px 20px rgba(13,27,46,0.14); display:flex; flex-direction:column; gap:0.35rem; }
+  .inv-stat-icon { font-size:1.4rem; }
+  .inv-stat-num { font-size:2rem; font-weight:700; font-family:var(--font-display); line-height:1; }
+  .inv-stat-lbl { font-size:0.8rem; color:var(--gray-400); font-weight:500; }
+  .inv-stat-card.blue .inv-stat-num { color:var(--blue-mid); }
+  .inv-stat-card.orange .inv-stat-num { color:#d97706; }
+  .inv-stat-card.red .inv-stat-num { color:#dc2626; }
+  .inv-stat-card.gold .inv-stat-num { color:#b45309; }
+  @media(max-width:768px) { .inv-stats { grid-template-columns:repeat(2,1fr); } }
+
+  /* TABLE CARD */
+  .inv-table-card { background:white; border-radius:var(--radius); border:1px solid rgba(13,27,46,0.06); box-shadow:0 4px 20px rgba(13,27,46,0.14); overflow:hidden; }
+  .inv-table-wrap { overflow-x:auto; }
+  .inv-table { width:100%; border-collapse:collapse; }
+  .inv-table th { padding:0.875rem 1rem; text-align:left; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.07em; color:var(--gray-400); font-weight:600; background:var(--gray-50); border-bottom:1px solid var(--gray-200); }
+  .inv-table td { padding:0.75rem 1rem; border-bottom:1px solid var(--gray-100); vertical-align:middle; }
+  .inv-table tr:last-child td { border-bottom:none; }
+  .inv-table tbody tr:hover { background:var(--gray-50); }
+
+  /* LOADING STATE */
+  .table-loading-wrap { display:flex; align-items:center; justify-content:center; padding:4rem 2rem; flex-direction:column; gap:1rem; }
+  .table-loading-inner { display:flex; flex-direction:column; align-items:center; gap:1rem; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loading-spinner { width:44px; height:44px; border:3px solid var(--gray-200); border-top-color:var(--blue-mid); border-radius:50%; animation:spin 0.8s linear infinite; }
+  .loading-text { color:var(--gray-400); font-size:0.9rem; }
+  .table-empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4rem 2rem; text-align:center; }
+
+  /* THUMB */
+  .inv-thumb-wrap { width:52px; }
+  .inv-thumb { width:52px; height:72px; object-fit:cover; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.12); display:block; }
+  .inv-thumb-default { width:52px; height:72px; border-radius:6px; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:0.25rem; }
+
+  /* BOOK META */
+  .inv-book-name { font-weight:600; font-size:0.9rem; color:var(--navy); }
+  .inv-book-author { font-size:0.78rem; color:var(--gray-400); margin-top:2px; }
+  .inv-isbn { font-size:0.75rem; font-family:monospace; background:var(--gray-100); padding:2px 6px; border-radius:4px; color:var(--gray-600); }
+  .inv-price { color:var(--blue-mid); font-size:0.95rem; }
+  .cat-tag { display:inline-block; font-size:0.72rem; font-weight:600; padding:3px 10px; border-radius:999px; }
+
+  /* STOCK BADGES */
+  .stock-badge { display:inline-flex; align-items:center; justify-content:center; min-width:36px; padding:2px 10px; border-radius:999px; font-size:0.8rem; font-weight:700; }
+  .stock-ok { background:#dcfce7; color:#166534; }
+  .stock-low { background:#fef3c7; color:#92400e; }
+  .stock-out { background:#fee2e2; color:#991b1b; }
+  .badge-bs { background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:999px; font-size:0.75rem; font-weight:600; }
+  .badge-out-of-stock { background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:999px; font-size:0.75rem; font-weight:600; }
+  .badge-ok { background:#dcfce7; color:#166534; padding:2px 8px; border-radius:999px; font-size:0.75rem; font-weight:600; }
+
+  /* ACTIONS */
+  .inv-actions { display:flex; gap:0.4rem; }
+  .action-btn { width:32px; height:32px; border-radius:6px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.9rem; transition:all 0.15s; }
+  .edit-btn { background:#eff6ff; } .edit-btn:hover { background:#dbeafe; }
+  .del-btn { background:#fef2f2; } .del-btn:hover { background:#fee2e2; }
+
+  /* MODAL */
+  .modal-overlay { position:fixed; inset:0; background:rgba(13,27,46,0.65); backdrop-filter:blur(4px); z-index:9000; display:none; align-items:center; justify-content:center; padding:1rem; }
+  .modal-overlay.show { display:flex; }
+  .modal-box { background:white; border-radius:20px; box-shadow:0 24px 80px rgba(13,27,46,0.25); width:100%; max-width:440px; max-height:92vh; overflow-y:auto; }
+  .modal-box.modal-lg { max-width:700px; }
+  .modal-header { display:flex; align-items:flex-start; justify-content:space-between; padding:1.5rem 1.75rem 1rem; border-bottom:1px solid var(--gray-100); }
+  .modal-title { font-family:var(--font-display); font-size:1.3rem; font-weight:700; color:var(--navy); }
+  .modal-subtitle { font-size:0.85rem; color:var(--gray-400); margin-top:2px; }
+  .modal-close-btn { width:32px; height:32px; border-radius:50%; border:none; background:var(--gray-100); cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:0.8rem; }
+  .modal-close-btn:hover { background:var(--gray-200); }
+  .modal-body { padding:1.25rem 1.75rem; }
+  .modal-footer { padding:1rem 1.75rem 1.5rem; display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid var(--gray-100); }
+
+  /* IMAGE UPLOAD */
+  .img-upload-section { display:flex; gap:1.5rem; align-items:center; padding:1.25rem; background:var(--gray-50); border-radius:12px; border:1.5px dashed var(--gray-200); margin-bottom:1rem; }
+  .pdf-upload-section { display:flex; gap:1.25rem; align-items:flex-start; padding:1rem 1.25rem; background:#f0fdf4; border-radius:12px; border:1.5px dashed #86efac; margin-bottom:1.5rem; }
+  .pdf-upload-icon { font-size:2.2rem; flex-shrink:0; margin-top:0.1rem; }
+  .pdf-upload-title { font-weight:600; font-size:0.9rem; color:var(--navy); margin-bottom:0.2rem; }
+  .pdf-upload-optional { font-weight:400; font-size:0.78rem; color:var(--gray-400); }
+  .pdf-upload-desc { font-size:0.78rem; color:var(--gray-400); }
+  .img-preview-wrap { flex-shrink:0; }
+  .img-preview-default { width:80px; height:110px; background:linear-gradient(135deg,var(--blue-dark),var(--navy)); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:2.5rem; }
+  .img-preview { width:80px; height:110px; object-fit:cover; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
+  .img-upload-title { font-weight:600; font-size:0.9rem; color:var(--navy); margin-bottom:0.25rem; }
+  .img-upload-desc { font-size:0.8rem; color:var(--gray-400); }
+
+  /* FORM GRID */
+  .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:0 1rem; }
+  @media(max-width:600px) { .form-grid-2 { grid-template-columns:1fr; } }
+
+  /* SUPPLIER SECTION */
+  .compra-section { margin-top:1.5rem; padding:1.25rem; background:linear-gradient(135deg,#eff6ff,#f0fdf4); border-radius:10px; border:1.5px solid #bfdbfe; }
+  .compra-section-header { display:flex; align-items:flex-start; gap:0.875rem; margin-bottom:1.25rem; }
+  .compra-section-icon { font-size:1.5rem; flex-shrink:0; margin-top:2px; }
+  .compra-section-title { font-weight:700; font-size:0.95rem; color:var(--navy); margin-bottom:2px; }
+  .compra-section-sub { font-size:0.78rem; color:var(--gray-400); line-height:1.4; }
+
+  @keyframes shimmer { 0%{background-position:-500px 0} 100%{background-position:500px 0} }
+  .skeleton { background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%); background-size:1000px 100%; animation:shimmer 1.5s infinite linear; }
 </style>

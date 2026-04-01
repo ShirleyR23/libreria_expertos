@@ -107,6 +107,12 @@ class SaleService:
             # Actualizar stock del libro
             detalle["book"].registrar_venta(detalle["cantidad"])
         
+        self.db.commit()
+        
+        # Recalcular bestseller: el libro con más ventas totales
+        from app.services.book_service import BookService
+        BookService(self.db).recalculate_bestseller()
+        
         # Generar factura
         self._create_invoice(new_sale, subtotal, impuesto, total, cliente_id)
         
@@ -177,7 +183,9 @@ class SaleService:
         """Obtiene las ventas de un cliente."""
         return self.db.query(Sale).options(
             joinedload(Sale.items).joinedload(SaleItem.book),
-            joinedload(Sale.invoice)
+            joinedload(Sale.invoice),
+            joinedload(Sale.cliente).joinedload(Client.user),
+            joinedload(Sale.empleado).joinedload(Employee.user)
         ).filter(
             Sale.cliente_id == cliente_id
         ).order_by(Sale.created_at.desc()).all()
@@ -191,7 +199,9 @@ class SaleService:
         """Obtiene todas las ventas con filtros opcionales."""
         query = self.db.query(Sale).options(
             joinedload(Sale.items).joinedload(SaleItem.book),
-            joinedload(Sale.invoice)
+            joinedload(Sale.invoice),
+            joinedload(Sale.cliente).joinedload(Client.user),
+            joinedload(Sale.empleado).joinedload(Employee.user)
         )
         
         if tipo:

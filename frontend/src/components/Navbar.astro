@@ -11,6 +11,7 @@ const menuItems: Record<string, Array<{label: string, href: string, icon: string
     { label: 'Inventario', href: '/inventario', icon: '📚' },
     { label: 'Ventas', href: '/ventas', icon: '💰' },
     { label: 'Compras', href: '/compras', icon: '📦' },
+    { label: 'Proveedores', href: '/proveedores', icon: '🏭' },
     { label: 'Empleados', href: '/empleados', icon: '👥' },
     { label: 'Sistema Experto', href: '/sistema-experto', icon: '🤖' },
     { label: 'Ver Catálogo', href: '/catalogo-admin', icon: '🏪' },
@@ -19,12 +20,13 @@ const menuItems: Record<string, Array<{label: string, href: string, icon: string
     { label: 'Dashboard', href: '/dashboard-empleado', icon: '▦' },
     { label: 'Inventario', href: '/inventario', icon: '📚' },
     { label: 'Ventas', href: '/ventas', icon: '💰' },
+    { label: 'Proveedores', href: '/proveedores', icon: '🏭' },
     { label: 'Ver Catálogo', href: '/catalogo-admin', icon: '🏪' },
   ],
   CLIENTE: [
     { label: 'Catálogo', href: '/catalogo', icon: '🏪' },
     { label: 'Mis Libros', href: '/mis-libros', icon: '📖' },
-    { label: 'Mis Compras', href: '/mis-compras', icon: '🛒' },
+    { label: 'Mis Compras', href: '/mis-compras', icon: '💳' },
     { label: 'Recomendaciones', href: '/recomendaciones', icon: '⭐' },
   ],
 };
@@ -55,10 +57,29 @@ const initials = userName.split(' ').map(w => w[0]).join('').substring(0,2).toUp
         <a href={item.href} class={`nav-link ${currentPath === item.href ? 'active' : ''}`}>
           <span class="nav-icon">{item.icon}</span>
           <span>{item.label}</span>
+          {item.href === '/carrito' && <span class="sidebar-cart-badge" id="sidebarCartBadge" style="display:none">0</span>}
         </a>
       ))}
     </div>
   </nav>
+
+  <script is:inline>
+    (function() {
+      const badge = document.getElementById('sidebarCartBadge');
+      if (!badge) return;
+      function update() {
+        try {
+          const cart = JSON.parse(localStorage.getItem('libreria_cart') || '[]');
+          const total = cart.reduce((s, i) => s + (i.qty || 1), 0);
+          badge.textContent = total;
+          badge.style.display = total > 0 ? 'inline-flex' : 'none';
+        } catch {}
+      }
+      update();
+      window.addEventListener('storage', update);
+      window.addEventListener('focus', update);
+    })();
+  </script>
 
   <div class="sidebar-footer">
     <button id="logoutBtn" class="logout-btn">
@@ -90,4 +111,5 @@ const initials = userName.split(' ').map(w => w[0]).join('').substring(0,2).toUp
   .sidebar-footer { padding: 1rem; border-top: 1px solid rgba(255,255,255,0.07); }
   .logout-btn { width: 100%; display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 1rem; background: rgba(220,38,38,0.12); color: #fca5a5; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: all 0.2s; font-family: var(--font-body); }
   .logout-btn:hover { background: rgba(220,38,38,0.25); color: #fee2e2; }
+  .sidebar-cart-badge { background: #ef4444; color: white; border-radius: 999px; min-width: 18px; height: 18px; font-size: 0.65rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; margin-left: auto; }
 </style>

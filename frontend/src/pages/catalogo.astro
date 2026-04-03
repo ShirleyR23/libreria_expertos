@@ -20,6 +20,16 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
         <span class="brand-name">Librería</span>
       </a>
       <div class="nav-actions">
+        {isCliente ? (
+          <a href="/carrito" class="cart-nav-btn" id="cartNavBtn" title="Ver carrito">
+            🛒
+            <span class="cart-nav-badge" id="cartNavBadge" style="display:none">0</span>
+          </a>
+        ) : (
+          <button type="button" class="cart-nav-btn" id="cartNavBtn" title="Ver carrito" onclick="document.getElementById('loginRequiredModal').style.display='flex'">
+            🛒
+          </button>
+        )}
         {user ? (
           <>
             <span class="nav-greeting">Hola, <strong>{user.nombre}</strong></span>
@@ -138,6 +148,13 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
       <p class="empty-desc">No se pudo conectar con el servidor. Verifica que el backend esté activo.</p>
       <button onclick="loadBooks()" class="btn btn-primary">Reintentar</button>
     </div>
+
+    <!-- INFINITE SCROLL SENTINEL + LOADER -->
+    <div id="scrollSentinel" style="height:1px;margin-top:2rem;"></div>
+    <div id="scrollLoader" class="scroll-loader" style="display:none">
+      <div class="scroll-spinner"></div>
+      <span>Cargando más libros…</span>
+    </div>
   </main>
 
   <!-- PDF PREVIEW MODAL -->
@@ -236,11 +253,33 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     </div>
   </div>
 
+  <!-- ===== MODAL: Login requerido para carrito ===== -->
+  <div id="loginRequiredModal" style="display:none" class="lrm-overlay" role="dialog" aria-modal="true" aria-labelledby="lrmTitle">
+    <div class="lrm-box">
+      <div class="lrm-icon">🛒</div>
+      <h2 class="lrm-title" id="lrmTitle">Tu carrito te está esperando</h2>
+      <p class="lrm-body">
+        Para agregar libros al carrito y realizar compras necesitas tener una cuenta.<br>
+        Es gratis, rápido y te da acceso a tu biblioteca digital personal.
+      </p>
+      <div class="lrm-actions">
+        <a href="/login" class="lrm-btn lrm-btn-primary">
+          <span>👤</span> Iniciar sesión
+        </a>
+        <a href="/register" class="lrm-btn lrm-btn-secondary">
+          <span>✨</span> Crear cuenta gratis
+        </a>
+      </div>
+      <button class="lrm-close" onclick="document.getElementById('loginRequiredModal').style.display='none'" aria-label="Cerrar">✕</button>
+    </div>
+  </div>
+
+
 </PublicLayout>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" is:inline></script>
 
-<script is:inline define:vars={{ API_URL, isCliente }}>
+<script is:inline define:vars={{ API_URL, isCliente, token }}>
   // PDF.js worker
   if (window.pdfjsLib) {
     pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -255,6 +294,16 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   let currentCategory = '';
   let currentSort = 'default';
   let buyBook = null;
+
+  // Advanced filters state
+  let advFilters = { priceMin: null, priceMax: null, yearMin: null, yearMax: null, editorial: '', discount: false, pdf: false, stock: false };
+  let advOpen = false;
+
+  // Infinite scroll state
+  const PAGE_SIZE = 24;
+  let visibleCount = PAGE_SIZE;
+  let filteredBooks = [];
+  let isLoadingMore = false;
 
   // ============================================================
   // CATEGORY CONFIG — colores e iconos
@@ -284,9 +333,25 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   // ============================================================
   // INIT
   // ============================================================
+  // Set of book IDs the client has already purchased
+  window._purchasedIds = new Set();
+
   async function init() {
+    if (isCliente && token) {
+      try {
+        const r = await fetch(`${BACKEND}/sales/my-books`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (r.ok) {
+          const books = await r.json();
+          books.forEach(b => window._purchasedIds.add(b.id));
+        }
+      } catch {}
+    }
     await Promise.all([loadCategories(), loadBooks()]);
     setupSearch();
+    setupAdvancedFilters();
+    setupInfiniteScroll();
   }
 
   async function loadCategories() {
@@ -310,6 +375,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     search = search ?? currentSearch;
     categoryId = categoryId ?? currentCategory;
     showSkeleton();
+    visibleCount = PAGE_SIZE;
     try {
       const params = new URLSearchParams({ limit: 200 });
       if (search) params.append('search', search);
@@ -321,6 +387,112 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
       renderBooks();
     } catch(e) {
       showError();
+    }
+  }
+
+  function applyAdvancedFilters(books) {
+    return books.filter(b => {
+      const price = parseFloat(b.precio);
+      if (advFilters.priceMin !== null && price < advFilters.priceMin) return false;
+      if (advFilters.priceMax !== null && price > advFilters.priceMax) return false;
+      if (advFilters.yearMin && b.anio_publicacion && b.anio_publicacion < advFilters.yearMin) return false;
+      if (advFilters.yearMax && b.anio_publicacion && b.anio_publicacion > advFilters.yearMax) return false;
+      if (advFilters.editorial && !(b.editorial || '').toLowerCase().includes(advFilters.editorial.toLowerCase())) return false;
+      if (advFilters.discount && !b.precio_original) return false;
+      if (advFilters.pdf && !b.has_pdf) return false;
+      if (advFilters.stock && b.stock <= 0) return false;
+      return true;
+    });
+  }
+
+  function countActiveAdvFilters() {
+    let n = 0;
+    if (advFilters.priceMin !== null) n++;
+    if (advFilters.priceMax !== null) n++;
+    if (advFilters.yearMin) n++;
+    if (advFilters.yearMax) n++;
+    if (advFilters.editorial) n++;
+    if (advFilters.discount) n++;
+    if (advFilters.pdf) n++;
+    if (advFilters.stock) n++;
+    return n;
+  }
+
+  function setupAdvancedFilters() {
+    document.getElementById('toggleAdvBtn').addEventListener('click', () => {
+      advOpen = !advOpen;
+      document.getElementById('advFiltersPanel').style.display = advOpen ? 'block' : 'none';
+      document.getElementById('advChevron').textContent = advOpen ? '▲' : '▼';
+    });
+    document.getElementById('applyAdvBtn').addEventListener('click', () => {
+      advFilters.priceMin = parseFloat(document.getElementById('priceMin').value) || null;
+      advFilters.priceMax = parseFloat(document.getElementById('priceMax').value) || null;
+      advFilters.yearMin = parseInt(document.getElementById('yearMin').value) || null;
+      advFilters.yearMax = parseInt(document.getElementById('yearMax').value) || null;
+      advFilters.editorial = document.getElementById('editorialFilter').value.trim();
+      advFilters.discount = document.getElementById('filterDiscount').checked;
+      advFilters.pdf = document.getElementById('filterPdf').checked;
+      advFilters.stock = document.getElementById('filterStock').checked;
+      const cnt = countActiveAdvFilters();
+      const cntEl = document.getElementById('advFilterCount');
+      if (cnt > 0) { cntEl.textContent = cnt; cntEl.style.display = 'inline-flex'; }
+      else { cntEl.style.display = 'none'; }
+      visibleCount = PAGE_SIZE;
+      renderBooks();
+    });
+    document.getElementById('clearAdvBtn').addEventListener('click', () => {
+      advFilters = { priceMin: null, priceMax: null, yearMin: null, yearMax: null, editorial: '', discount: false, pdf: false, stock: false };
+      document.getElementById('priceMin').value = '';
+      document.getElementById('priceMax').value = '';
+      document.getElementById('yearMin').value = '';
+      document.getElementById('yearMax').value = '';
+      document.getElementById('editorialFilter').value = '';
+      document.getElementById('filterDiscount').checked = false;
+      document.getElementById('filterPdf').checked = false;
+      document.getElementById('filterStock').checked = false;
+      document.getElementById('advFilterCount').style.display = 'none';
+      visibleCount = PAGE_SIZE;
+      renderBooks();
+    });
+  }
+
+  function setupInfiniteScroll() {
+    const sentinel = document.getElementById('scrollSentinel');
+    const loader = document.getElementById('scrollLoader');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !isLoadingMore && visibleCount < filteredBooks.length) {
+          isLoadingMore = true;
+          loader.style.display = 'flex';
+          setTimeout(() => {
+            visibleCount = Math.min(visibleCount + PAGE_SIZE, filteredBooks.length);
+            appendMoreBooks();
+            loader.style.display = 'none';
+            isLoadingMore = false;
+          }, 400);
+        }
+      });
+    }, { rootMargin: '200px' });
+    observer.observe(sentinel);
+  }
+
+  function appendMoreBooks() {
+    const grid = document.getElementById('booksGrid');
+    const newSlice = filteredBooks.slice(visibleCount - PAGE_SIZE, visibleCount);
+    newSlice.forEach(b => {
+      const div = document.createElement('div');
+      div.innerHTML = bookCardHTML(b);
+      const card = div.firstElementChild;
+      grid.appendChild(card);
+    });
+    if (isCliente) {
+      grid.querySelectorAll('.btn-buy:not([data-bound])').forEach(btn => {
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => openBuyModal({
+          id: +btn.dataset.id, nombre: btn.dataset.nombre,
+          precio: +btn.dataset.precio, stock: +btn.dataset.stock, imagen_url: btn.dataset.img || ''
+        }));
+      });
     }
   }
 
@@ -367,19 +539,22 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     const grid = document.getElementById('booksGrid');
     const empty = document.getElementById('emptyState');
     document.getElementById('skeletonGrid').style.display = 'none';
-    const filtered = showOnlyBestsellers ? allBooks.filter(b => b.es_bestseller) : allBooks;
-    const books = getSorted(filtered);
-    if (books.length === 0) { grid.style.display = 'none'; empty.style.display = 'flex'; return; }
+    let base = showOnlyBestsellers ? allBooks.filter(b => b.es_bestseller) : allBooks;
+    base = applyAdvancedFilters(base);
+    filteredBooks = getSorted(base);
+    if (filteredBooks.length === 0) { grid.style.display = 'none'; empty.style.display = 'flex'; return; }
     empty.style.display = 'none';
     grid.style.display = 'grid';
-    grid.innerHTML = books.map(b => bookCardHTML(b)).join('');
+    const firstPage = filteredBooks.slice(0, visibleCount);
+    grid.innerHTML = firstPage.map(b => bookCardHTML(b)).join('');
     const srStat = document.getElementById('searchResultStat');
-    if (currentSearch || currentCategory) {
+    if (currentSearch || currentCategory || countActiveAdvFilters() > 0) {
       srStat.style.display = 'flex';
-      document.getElementById('searchResultCount').textContent = books.length;
+      document.getElementById('searchResultCount').textContent = filteredBooks.length;
     } else { srStat.style.display = 'none'; }
     if (isCliente) {
       grid.querySelectorAll('.btn-buy').forEach(btn => {
+        btn.dataset.bound = '1';
         btn.addEventListener('click', () => openBuyModal({
           id: +btn.dataset.id, nombre: btn.dataset.nombre,
           precio: +btn.dataset.precio, stock: +btn.dataset.stock, imagen_url: btn.dataset.img || ''
@@ -421,9 +596,16 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
         ? `<span class="book-stock low">⚡ Solo ${book.stock} disponibles</span>`
         : `<span class="book-stock ok">✔ ${book.stock} disponibles</span>`;
 
-    // Buy button
-    const buyBtn = isCliente && !outOfStock
-      ? `<button class="btn-buy" data-id="${book.id}" data-nombre="${book.nombre}" data-precio="${precio}" data-stock="${book.stock}" data-img="${book.imagen_url || ''}" title="Comprar">🛒</button>`
+    // Buttons: add to cart / quick buy — hidden if client already owns this book
+    const yaComprado = isCliente && window._purchasedIds && window._purchasedIds.has(book.id);
+    const addCartBtn = isCliente && !outOfStock && !yaComprado
+      ? `<button class="btn-cart" onclick='addToCart(${JSON.stringify({id:book.id,nombre:book.nombre,autor:book.autor,precio:precio,stock:book.stock,imagen_url:book.imagen_url||""})})' title="Agregar al carrito">🛒 Agregar</button>`
+      : '';
+    const buyBtn = isCliente && !outOfStock && !yaComprado
+      ? `<button class="btn-buy" data-id="${book.id}" data-nombre="${book.nombre}" data-precio="${precio}" data-stock="${book.stock}" data-img="${book.imagen_url || ''}" title="Comprar ahora">⚡</button>`
+      : '';
+    const ownedBadge = yaComprado
+      ? `<span class="btn-owned">✅ Ya lo tienes</span>`
       : '';
 
     // PDF preview button (visible to all if book has PDF)
@@ -473,8 +655,11 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
               ${stockLabel}
             </div>
             <div style="display:flex;flex-direction:column;gap:0.35rem;align-items:flex-end">
-              ${buyBtn}
-              ${pdfPreviewBtn}
+              ${addCartBtn}${ownedBadge}
+              <div style="display:flex;gap:0.35rem;align-items:center">
+                ${buyBtn}
+                ${pdfPreviewBtn}
+              </div>
             </div>
           </div>
         </div>
@@ -590,6 +775,8 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
         throw new Error(msg);
       }
       document.getElementById('buyModal').style.display = 'none';
+      // Add newly purchased book to the local set so UI updates immediately
+      if (buyBook) window._purchasedIds.add(buyBook.id);
       Modal.success('¡Compra realizada!', `Compraste <strong>${buyBook.nombre}</strong> (copia digital). Puedes leerlo en "Mis Libros".`);
       await loadBooks();
     } catch(e) {
@@ -668,7 +855,58 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     window.location.href = '/catalogo';
   });
 
+  // ── CARRITO ─────────────────────────────────────────────────
+  const CART_KEY = 'libreria_cart';
+
+  window.addToCart = function(book) {
+    let cart = [];
+    try { cart = JSON.parse(localStorage.getItem(CART_KEY) || '[]'); } catch {}
+    const idx = cart.findIndex(i => i.id === book.id);
+    if (idx >= 0) { cart[idx].qty = (cart[idx].qty || 1) + 1; }
+    else { cart.push({ ...book, qty: 1 }); }
+    localStorage.setItem(CART_KEY, JSON.stringify(cart));
+    updateCartBadgeNav();
+    showCartToast(book.nombre);
+  };
+
+  function updateCartBadgeNav() {
+    let cart = [];
+    try { cart = JSON.parse(localStorage.getItem(CART_KEY) || '[]'); } catch {}
+    const total = cart.reduce((s, i) => s + (i.qty || 1), 0);
+    const badge = document.getElementById('cartNavBadge');
+    if (badge) { badge.textContent = total; badge.style.display = total > 0 ? 'inline-flex' : 'none'; }
+  }
+
+  function showCartToast(nombre) {
+    let t = document.getElementById('cartToast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'cartToast';
+      t.className = 'cart-toast';
+      document.body.appendChild(t);
+    }
+    const short = nombre.length > 32 ? nombre.slice(0, 32) + '…' : nombre;
+    const cartLink = isCliente ? `<a href="/carrito">Ver carrito →</a>` : `<a href="#" onclick="event.preventDefault();document.getElementById('loginRequiredModal').style.display='flex'">Ver carrito →</a>`;
+    t.innerHTML = `<span>✅</span><span><strong>${short}</strong> agregado al carrito</span>${cartLink}`;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), 3500);
+  }
+
   init();
+  updateCartBadgeNav();
+
+  // Login-required modal: close on overlay click or ESC
+  document.addEventListener('click', function(e) {
+    const modal = document.getElementById('loginRequiredModal');
+    if (modal && e.target === modal) modal.style.display = 'none';
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      const modal = document.getElementById('loginRequiredModal');
+      if (modal && modal.style.display !== 'none') modal.style.display = 'none';
+    }
+  });
 </script>
 
 <style is:global>
@@ -727,12 +965,32 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .pill { display:inline-flex; align-items:center; gap:0.4rem; background:var(--blue-pale); color:var(--blue-mid); border-radius:999px; padding:0.35rem 0.85rem; font-size:0.8rem; font-weight:500; }
   .pill button { background:none; border:none; cursor:pointer; font-size:0.7rem; margin-left:2px; }
 
-  /* TOOLBAR */
-  .toolbar { display:flex; align-items:center; justify-content:flex-end; margin-bottom:1.5rem; }
+  /* TOOLBAR + ADVANCED FILTERS */
+  .adv-bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem; gap:1rem; flex-wrap:wrap; }
+  .adv-toggle-btn { display:inline-flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; border:1.5px solid var(--gray-200); border-radius:var(--radius-sm); background:white; font-family:var(--font-body); font-size:0.85rem; color:var(--gray-600); cursor:pointer; font-weight:500; transition:all 0.15s; }
+  .adv-toggle-btn:hover { border-color:var(--blue-mid); color:var(--blue-mid); }
+  .adv-count { background:var(--blue-mid); color:white; border-radius:999px; width:20px; height:20px; font-size:0.72rem; font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
+  .adv-panel { background:white; border:1.5px solid var(--gray-200); border-radius:var(--radius); padding:1.25rem 1.5rem 1rem; margin-bottom:1.25rem; box-shadow:var(--shadow-sm); animation:slideDown 0.2s ease; }
+  @keyframes slideDown { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:none} }
+  .adv-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:1rem; margin-bottom:1rem; }
+  .adv-field { display:flex; flex-direction:column; gap:0.3rem; }
+  .adv-label { font-size:0.75rem; font-weight:600; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.04em; }
+  .adv-input { padding:0.5rem 0.75rem; border:1.5px solid var(--gray-200); border-radius:var(--radius-sm); font-family:var(--font-body); font-size:0.875rem; color:var(--gray-800); transition:border-color 0.15s; }
+  .adv-input:focus { outline:none; border-color:var(--blue-mid); }
+  .adv-checks { grid-column: span 2; }
+  .adv-check-group { display:flex; flex-direction:column; gap:0.4rem; }
+  .adv-check { display:flex; align-items:center; gap:0.5rem; font-size:0.85rem; color:var(--gray-600); cursor:pointer; }
+  .adv-check input { width:16px; height:16px; accent-color:var(--blue-mid); cursor:pointer; }
+  .adv-actions { display:flex; gap:0.5rem; justify-content:flex-end; padding-top:0.75rem; border-top:1px solid var(--gray-100); }
+  .btn-sm { padding:0.4rem 1rem; font-size:0.825rem; }
   .sort-group { display:flex; align-items:center; gap:0.5rem; }
   .sort-label { font-size:0.85rem; color:var(--gray-400); font-weight:500; }
   .sort-select { padding:0.5rem 0.75rem; border:1.5px solid var(--gray-200); border-radius:var(--radius-sm); font-family:var(--font-body); font-size:0.85rem; color:var(--gray-800); background:white; cursor:pointer; }
   .sort-select:focus { outline:none; border-color:var(--blue-mid); }
+  /* INFINITE SCROLL */
+  .scroll-loader { display:flex; align-items:center; justify-content:center; gap:0.75rem; padding:2rem; color:var(--gray-400); font-size:0.875rem; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .scroll-spinner { width:24px; height:24px; border:2.5px solid var(--gray-200); border-top-color:var(--blue-mid); border-radius:50%; animation:spin 0.7s linear infinite; flex-shrink:0; }
 
   /* BOOKS GRID — columnas fijas de 230px con buen espacio entre ellas */
   .books-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:2rem; }
@@ -841,6 +1099,22 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     .hero-search { flex-direction:column; }
     .category-select { width:100%; }
   }
+
+  /* ── CART NAV BUTTON ── */
+  .cart-nav-btn { position:relative; display:flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.1); color:white; text-decoration:none; font-size:1.1rem; transition:background 0.2s; }
+  .cart-nav-btn:hover { background:rgba(255,255,255,0.2); }
+  .cart-nav-badge { position:absolute; top:-3px; right:-3px; background:#ef4444; color:white; border-radius:999px; min-width:18px; height:18px; font-size:0.65rem; font-weight:700; display:inline-flex; align-items:center; justify-content:center; padding:0 4px; border:2px solid rgba(13,27,46,0.9); }
+
+  /* ── CART BUTTON ON CARD ── */
+  .btn-cart { display:flex; align-items:center; gap:0.3rem; padding:5px 10px; border-radius:6px; background:var(--blue-mid); color:white; border:none; cursor:pointer; font-size:0.72rem; font-weight:700; transition:all 0.2s; white-space:nowrap; box-shadow:0 2px 6px rgba(37,99,235,0.3); }
+  .btn-cart:hover { background:var(--blue-dark); transform:scale(1.04); }
+  .btn-owned { display:flex; align-items:center; gap:0.3rem; padding:5px 10px; border-radius:6px; background:#dcfce7; color:#16a34a; font-size:0.72rem; font-weight:700; border:1px solid #86efac; white-space:nowrap; }
+
+  /* ── TOAST NOTIFICATION ── */
+  .cart-toast { position:fixed; bottom:2rem; right:2rem; background:white; border-radius:12px; padding:0.875rem 1.25rem; box-shadow:0 8px 30px rgba(13,27,46,0.18); border:1px solid #e2e8f0; display:flex; align-items:center; gap:0.75rem; font-size:0.875rem; color:#0d1b2e; z-index:9999; transform:translateY(120%); opacity:0; transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1); max-width:360px; border-left:4px solid #2563eb; }
+  .cart-toast.show { transform:translateY(0); opacity:1; }
+  .cart-toast a { color:#2563eb; font-weight:700; text-decoration:none; white-space:nowrap; }
+  .cart-toast a:hover { text-decoration:underline; }
   /* ── PDF PREVIEW BUTTON ── */
   .btn-pdf-preview { background:var(--gray-100);color:var(--gray-600);border:1px solid var(--gray-200);border-radius:6px;padding:4px 9px;font-size:0.68rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.15s; }
   .btn-pdf-preview:hover { background:#eff6ff;color:var(--blue-mid);border-color:var(--blue-mid); }
@@ -870,4 +1144,21 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .pdf-prev-blur-content h3 { font-size:1.1rem;font-weight:700;margin-bottom:0.5rem; }
   .pdf-prev-blur-content p { font-size:0.85rem;color:rgba(255,255,255,0.65);margin-bottom:1.25rem;line-height:1.5; }
   .pdf-prev-drm { position:fixed;inset:0;z-index:9501;pointer-events:none; }
+  /* ===== Login Required Modal ===== */
+  .lrm-overlay { position:fixed; inset:0; background:rgba(13,27,46,0.65); backdrop-filter:blur(4px); z-index:10000; display:flex; align-items:center; justify-content:center; padding:1rem; animation:lrmFadeIn 0.2s ease; }
+  @keyframes lrmFadeIn { from { opacity:0; } to { opacity:1; } }
+  .lrm-box { position:relative; background:white; border-radius:20px; padding:2.5rem 2rem 2rem; max-width:420px; width:100%; text-align:center; box-shadow:0 24px 60px rgba(13,27,46,0.22); animation:lrmSlideUp 0.25s cubic-bezier(0.34,1.56,0.64,1); }
+  @keyframes lrmSlideUp { from { transform:translateY(28px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+  .lrm-icon { font-size:3rem; margin-bottom:0.75rem; display:block; }
+  .lrm-title { font-size:1.3rem; font-weight:800; color:#0d1b2e; margin:0 0 0.75rem; line-height:1.3; }
+  .lrm-body { font-size:0.9rem; color:#475569; line-height:1.65; margin:0 0 1.75rem; }
+  .lrm-actions { display:flex; flex-direction:column; gap:0.75rem; }
+  .lrm-btn { display:flex; align-items:center; justify-content:center; gap:0.5rem; padding:0.8rem 1.25rem; border-radius:10px; font-size:0.95rem; font-weight:700; text-decoration:none; transition:all 0.2s; }
+  .lrm-btn-primary { background:#2563eb; color:white; box-shadow:0 4px 14px rgba(37,99,235,0.35); }
+  .lrm-btn-primary:hover { background:#1d4ed8; transform:translateY(-1px); box-shadow:0 6px 18px rgba(37,99,235,0.4); }
+  .lrm-btn-secondary { background:#f1f5f9; color:#0d1b2e; border:1.5px solid #e2e8f0; }
+  .lrm-btn-secondary:hover { background:#e2e8f0; transform:translateY(-1px); }
+  .lrm-close { position:absolute; top:0.9rem; right:0.9rem; background:none; border:none; font-size:1rem; color:#94a3b8; cursor:pointer; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border-radius:50%; transition:all 0.2s; }
+  .lrm-close:hover { background:#f1f5f9; color:#475569; }
+
 </style>

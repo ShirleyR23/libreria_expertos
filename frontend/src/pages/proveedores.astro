@@ -1,0 +1,639 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
+if (!user || (user.role_name !== 'ADMIN' && user.role_name !== 'EMPLEADO')) return Astro.redirect('/login');
+const isAdmin = user.role_name === 'ADMIN';
+const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+---
+
+<DashboardLayout title="Proveedores" userRole={user.role_name}>
+
+<!-- PAGE HEADER -->
+<div class="page-header">
+  <div>
+    <h1 class="page-title">🏭 Proveedores</h1>
+    <p class="page-sub">Gestiona los proveedores y realiza pedidos de reabastecimiento</p>
+  </div>
+  {isAdmin && <button id="newSupplierBtn" class="btn btn-primary">+ Nuevo proveedor</button>}
+</div>
+
+<!-- STATES -->
+<div id="loadingState" class="state-box">
+  <div class="state-spinner"></div><p>Cargando proveedores…</p>
+</div>
+<div id="emptyState" class="state-box" style="display:none">
+  <div style="font-size:3rem;margin-bottom:0.75rem">🏭</div>
+  <h3>No hay proveedores registrados</h3>
+  <p>Agrega el primer proveedor para empezar a gestionar el inventario.</p>
+  {isAdmin && <button onclick="openNewSupplier()" class="btn btn-primary" style="margin-top:1rem">+ Agregar proveedor</button>}
+</div>
+
+<!-- SUPPLIERS GRID -->
+<div id="suppliersGrid" class="suppliers-grid" style="display:none"></div>
+
+<!-- ══════════════════════════════════════════════
+     MODAL: CREAR / EDITAR PROVEEDOR
+═══════════════════════════════════════════════ -->
+<div id="supplierModal" class="modal-overlay" style="display:none">
+  <div class="modal-box modal-lg">
+    <div class="modal-header">
+      <h2 id="modalTitle" class="modal-title">Nuevo proveedor</h2>
+      <button onclick="closeModal('supplierModal')" class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group span2">
+          <label class="form-label">Nombre del proveedor *</label>
+          <input type="text" id="supNombre" class="form-input" placeholder="Distribuidora XYZ">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contacto</label>
+          <input type="text" id="supContacto" class="form-input" placeholder="Nombre del representante">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Teléfono</label>
+          <input type="text" id="supTelefono" class="form-input" placeholder="+504 9999-9999">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="supEmail" class="form-input" placeholder="contacto@proveedor.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dirección</label>
+          <input type="text" id="supDireccion" class="form-input" placeholder="Ciudad, País">
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">Notas</label>
+          <textarea id="supNotas" class="form-input" rows="2" placeholder="Condiciones, plazos de entrega…"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('supplierModal')" class="btn btn-secondary">Cancelar</button>
+      <button id="saveSupplierBtn" class="btn btn-primary" onclick="saveSupplier()">
+        <span id="saveBtnText">Guardar proveedor</span>
+        <span id="saveBtnSpinner" class="spinner" style="display:none"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     MODAL: DETALLE DEL PROVEEDOR (catálogo + pedido)
+═══════════════════════════════════════════════ -->
+<div id="detailModal" class="modal-overlay" style="display:none">
+  <div class="modal-box modal-xl">
+    <div class="modal-header">
+      <div>
+        <h2 id="detailName" class="modal-title">Proveedor</h2>
+        <p id="detailMeta" class="modal-meta"></p>
+      </div>
+      <div style="display:flex;gap:0.5rem;align-items:center;">
+        <button id="makeOrderBtn" class="btn btn-primary btn-sm">📦 Realizar pedido</button>
+        <button onclick="closeModal('detailModal')" class="modal-close">✕</button>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="tab-bar">
+      <button class="tab active" data-tab="catalog">📚 Catálogo</button>
+      <button class="tab" data-tab="history">🧾 Historial de pedidos</button>
+      {isAdmin && <button class="tab" data-tab="edit">✏️ Editar info</button>}
+    </div>
+
+    <!-- TAB: CATALOG -->
+    <div id="tabCatalog" class="tab-content">
+      <div class="catalog-actions" style={isAdmin ? '' : 'display:none'}>
+        <h4 class="section-sub">Agregar libro al catálogo</h4>
+        <div class="catalog-add-row">
+          <select id="addBookSelect" class="form-input" style="flex:1">
+            <option value="">Selecciona un libro…</option>
+          </select>
+          <input type="number" id="addBookCosto" class="form-input" placeholder="Costo (L)" min="0" step="0.01" style="width:120px">
+          <button onclick="addBookToCatalog()" class="btn btn-secondary btn-sm">Agregar</button>
+        </div>
+      </div>
+      <div id="catalogList" class="catalog-list"></div>
+    </div>
+
+    <!-- TAB: HISTORY -->
+    <div id="tabHistory" class="tab-content" style="display:none">
+      <div id="historyList" class="history-list"></div>
+    </div>
+
+    <!-- TAB: EDIT -->
+    <div id="tabEdit" class="tab-content" style="display:none">
+      <div class="form-grid">
+        <div class="form-group span2">
+          <label class="form-label">Nombre</label>
+          <input type="text" id="editNombre" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contacto</label>
+          <input type="text" id="editContacto" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Teléfono</label>
+          <input type="text" id="editTelefono" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="editEmail" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dirección</label>
+          <input type="text" id="editDireccion" class="form-input">
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">Notas</label>
+          <textarea id="editNotas" class="form-input" rows="2"></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:0.75rem;justify-content:flex-end;margin-top:1rem;">
+        <button onclick="deleteSupplier()" class="btn btn-danger btn-sm">Desactivar proveedor</button>
+        <button onclick="updateSupplier()" class="btn btn-primary btn-sm">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     MODAL: REALIZAR PEDIDO
+═══════════════════════════════════════════════ -->
+<div id="orderModal" class="modal-overlay" style="display:none">
+  <div class="modal-box modal-lg">
+    <div class="modal-header">
+      <h2 class="modal-title">📦 Realizar pedido</h2>
+      <button onclick="closeModal('orderModal')" class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-meta" id="orderSupplierName" style="margin-bottom:1rem"></p>
+      <div id="orderItemsList" class="order-items"></div>
+      <div id="orderEmpty" class="order-empty" style="display:none">
+        <p>El catálogo de este proveedor está vacío. Agrega libros primero.</p>
+      </div>
+      <div class="form-group" style="margin-top:1rem">
+        <label class="form-label">Notas del pedido</label>
+        <textarea id="orderNotas" class="form-input" rows="2" placeholder="Condiciones especiales, fecha de entrega…"></textarea>
+      </div>
+      <div class="order-total-row" id="orderTotalRow" style="display:none">
+        <span>Total estimado:</span>
+        <strong id="orderTotal">L 0.00</strong>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('orderModal')" class="btn btn-secondary">Cancelar</button>
+      <button id="confirmOrderBtn" class="btn btn-primary" onclick="confirmOrder()">
+        <span id="orderBtnText">Confirmar pedido</span>
+        <span id="orderBtnSpinner" class="spinner" style="display:none"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+</DashboardLayout>
+
+<script is:inline define:vars={{ API_URL, isAdmin }}>
+  const BACKEND = API_URL || 'http://localhost:8000/api/v1';
+  const token = () => localStorage.getItem('token');
+  const headers = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` });
+
+  let suppliers = [];
+  let allBooks = [];
+  let currentSupplier = null;
+  let editingId = null;
+
+  // ── INIT ──────────────────────────────────────────────────────
+  async function init() {
+    await Promise.all([loadSuppliers(), loadAllBooks()]);
+  }
+
+  async function loadAllBooks() {
+    try {
+      const r = await fetch(`${BACKEND}/books/catalog?limit=500&solo_disponibles=false`, { headers: headers() });
+      if (r.ok) allBooks = await r.json();
+      populateBookSelect();
+    } catch(e) {}
+  }
+
+  function populateBookSelect() {
+    const sel = document.getElementById('addBookSelect');
+    sel.innerHTML = '<option value="">Selecciona un libro…</option>';
+    allBooks.forEach(b => {
+      const o = document.createElement('option');
+      o.value = b.id;
+      o.textContent = `${b.nombre} — ${b.autor} (Stock: ${b.stock})`;
+      o.dataset.nombre = b.nombre;
+      sel.appendChild(o);
+    });
+  }
+
+  async function loadSuppliers() {
+    try {
+      const r = await fetch(`${BACKEND}/suppliers/`, { headers: headers() });
+      if (!r.ok) throw new Error();
+      suppliers = await r.json();
+      renderSuppliers();
+    } catch(e) {
+      document.getElementById('loadingState').innerHTML = '<p style="color:#dc2626">Error al cargar proveedores.</p>';
+    }
+  }
+
+  // ── RENDER SUPPLIERS GRID ─────────────────────────────────────
+  function renderSuppliers() {
+    const grid = document.getElementById('suppliersGrid');
+    const empty = document.getElementById('emptyState');
+    const loading = document.getElementById('loadingState');
+    loading.style.display = 'none';
+
+    if (suppliers.length === 0) { empty.style.display = 'flex'; grid.style.display = 'none'; return; }
+    empty.style.display = 'none';
+    grid.style.display = 'grid';
+
+    grid.innerHTML = suppliers.map(s => `
+      <div class="supplier-card" onclick="openDetail(${s.id})">
+        <div class="supplier-card-top">
+          <div class="supplier-avatar">${s.nombre.charAt(0).toUpperCase()}</div>
+          <div class="supplier-info">
+            <h3 class="supplier-name">${s.nombre}</h3>
+            <p class="supplier-contact">${s.contacto || '—'}</p>
+          </div>
+        </div>
+        <div class="supplier-tags">
+          ${s.email ? `<span class="tag tag-blue">✉ ${s.email}</span>` : ''}
+          ${s.telefono ? `<span class="tag tag-gray">📞 ${s.telefono}</span>` : ''}
+        </div>
+        <div class="supplier-stats">
+          <div class="sup-stat"><div class="sup-stat-val">${(s.catalogo||[]).length}</div><div class="sup-stat-lbl">libros</div></div>
+          <div class="sup-stat-divider"></div>
+          <div class="sup-stat"><div class="sup-stat-val">${s.total_pedidos||0}</div><div class="sup-stat-lbl">pedidos</div></div>
+        </div>
+        <button class="supplier-detail-btn">Ver detalles →</button>
+      </div>`).join('');
+  }
+
+  // ── DETAIL MODAL ─────────────────────────────────────────────
+  async function openDetail(id) {
+    try {
+      const r = await fetch(`${BACKEND}/suppliers/${id}`, { headers: headers() });
+      if (!r.ok) throw new Error();
+      currentSupplier = await r.json();
+    } catch(e) { alert('Error al cargar proveedor'); return; }
+
+    document.getElementById('detailName').textContent = currentSupplier.nombre;
+    document.getElementById('detailMeta').textContent =
+      [currentSupplier.contacto, currentSupplier.email, currentSupplier.telefono].filter(Boolean).join(' · ') || 'Sin info de contacto';
+
+    // Edit tab prefill
+    if (isAdmin) {
+      document.getElementById('editNombre').value = currentSupplier.nombre || '';
+      document.getElementById('editContacto').value = currentSupplier.contacto || '';
+      document.getElementById('editTelefono').value = currentSupplier.telefono || '';
+      document.getElementById('editEmail').value = currentSupplier.email || '';
+      document.getElementById('editDireccion').value = currentSupplier.direccion || '';
+      document.getElementById('editNotas').value = currentSupplier.notas || '';
+    }
+
+    renderCatalog();
+    renderHistory();
+    activateTab('catalog');
+    document.getElementById('detailModal').style.display = 'flex';
+  }
+
+  function renderCatalog() {
+    const list = document.getElementById('catalogList');
+    const cat = currentSupplier.catalogo || [];
+    if (cat.length === 0) {
+      list.innerHTML = '<p class="empty-catalog">Este proveedor no tiene libros en su catálogo aún.</p>';
+      return;
+    }
+    list.innerHTML = `
+      <table class="catalog-table">
+        <thead><tr><th>Libro</th><th>Autor</th><th>Stock actual</th><th>Costo unitario</th>${isAdmin ? '<th></th>' : ''}</tr></thead>
+        <tbody>${cat.map(item => `
+          <tr>
+            <td><strong>${item.libro_nombre || '—'}</strong><br><span class="isbn-small">${item.libro_isbn || ''}</span></td>
+            <td>${item.libro_autor || '—'}</td>
+            <td>
+              <span class="stock-badge ${item.libro_stock <= 5 ? 'low' : 'ok'}">${item.libro_stock ?? '—'}</span>
+            </td>
+            <td><strong>L ${parseFloat(item.costo_unitario).toFixed(2)}</strong></td>
+            ${isAdmin ? `<td><button class="btn-icon-del" onclick="removeFromCatalog(${currentSupplier.id},${item.libro_id})" title="Eliminar">🗑</button></td>` : ''}
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  function renderHistory() {
+    const list = document.getElementById('historyList');
+    // We'll show a placeholder — full history would require a dedicated endpoint
+    list.innerHTML = `<p class="empty-catalog">El historial de pedidos se registra en el módulo de Compras.</p>
+      <a href="/compras" class="btn btn-secondary btn-sm" style="margin-top:0.75rem;display:inline-flex">Ver compras →</a>`;
+  }
+
+  // ── CATALOG ACTIONS ───────────────────────────────────────────
+  window.addBookToCatalog = async function() {
+    const sel = document.getElementById('addBookSelect');
+    const costoEl = document.getElementById('addBookCosto');
+    const libroId = parseInt(sel.value);
+    const costo = parseFloat(costoEl.value);
+    if (!libroId || !costo || costo <= 0) { alert('Selecciona un libro y escribe el costo.'); return; }
+
+    try {
+      const r = await fetch(`${BACKEND}/suppliers/${currentSupplier.id}/catalog`, {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ libro_id: libroId, costo_unitario: costo })
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+      currentSupplier = await r.json();
+      sel.value = '';
+      costoEl.value = '';
+      renderCatalog();
+    } catch(e) { alert('Error: ' + e.message); }
+  };
+
+  window.removeFromCatalog = async function(supplierId, libroId) {
+    if (!confirm('¿Quitar este libro del catálogo?')) return;
+    try {
+      const r = await fetch(`${BACKEND}/suppliers/${supplierId}/catalog/${libroId}`, {
+        method: 'DELETE', headers: headers()
+      });
+      if (!r.ok) throw new Error();
+      currentSupplier = await r.json();
+      renderCatalog();
+    } catch(e) { alert('Error al eliminar del catálogo'); }
+  };
+
+  // ── ORDER MODAL ───────────────────────────────────────────────
+  document.getElementById('makeOrderBtn').addEventListener('click', openOrderModal);
+
+  function openOrderModal() {
+    const cat = currentSupplier?.catalogo || [];
+    document.getElementById('orderSupplierName').textContent = `Proveedor: ${currentSupplier?.nombre}`;
+    document.getElementById('orderNotas').value = '';
+
+    const list = document.getElementById('orderItemsList');
+    const emptyEl = document.getElementById('orderEmpty');
+
+    if (cat.length === 0) {
+      list.innerHTML = '';
+      emptyEl.style.display = 'block';
+      document.getElementById('orderTotalRow').style.display = 'none';
+    } else {
+      emptyEl.style.display = 'none';
+      document.getElementById('orderTotalRow').style.display = 'flex';
+      list.innerHTML = cat.map(item => `
+        <div class="order-item">
+          <div class="order-item-info">
+            <strong>${item.libro_nombre || '—'}</strong>
+            <span class="order-item-meta">Stock actual: ${item.libro_stock ?? '—'} · Costo: L ${parseFloat(item.costo_unitario).toFixed(2)}</span>
+          </div>
+          <div class="order-item-qty">
+            <label class="form-label" style="font-size:0.7rem">Cantidad</label>
+            <input type="number" class="form-input qty-order-input" min="0" value="0"
+              data-libro-id="${item.libro_id}" data-costo="${item.costo_unitario}"
+              oninput="recalcOrderTotal()" style="width:80px;text-align:center">
+          </div>
+        </div>`).join('');
+    }
+    recalcOrderTotal();
+    document.getElementById('orderModal').style.display = 'flex';
+  }
+
+  function recalcOrderTotal() {
+    let total = 0;
+    document.querySelectorAll('.qty-order-input').forEach(inp => {
+      const qty = parseInt(inp.value) || 0;
+      const costo = parseFloat(inp.dataset.costo) || 0;
+      total += qty * costo;
+    });
+    document.getElementById('orderTotal').textContent = `L ${total.toFixed(2)}`;
+  }
+
+  window.confirmOrder = async function() {
+    const items = [];
+    document.querySelectorAll('.qty-order-input').forEach(inp => {
+      const qty = parseInt(inp.value) || 0;
+      if (qty > 0) {
+        items.push({ libro_id: parseInt(inp.dataset.libroId), cantidad: qty, costo_unitario: parseFloat(inp.dataset.costo) });
+      }
+    });
+    if (items.length === 0) { alert('Agrega al menos un libro con cantidad mayor a 0.'); return; }
+
+    const btn = document.getElementById('confirmOrderBtn');
+    btn.disabled = true;
+    document.getElementById('orderBtnText').style.display = 'none';
+    document.getElementById('orderBtnSpinner').style.display = 'inline-block';
+
+    try {
+      const r = await fetch(`${BACKEND}/suppliers/${currentSupplier.id}/order`, {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ items, notas: document.getElementById('orderNotas').value.trim() || null })
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Error'); }
+      closeModal('orderModal');
+      closeModal('detailModal');
+      alert(`✅ Pedido realizado correctamente. El stock se ha actualizado.`);
+      loadSuppliers();
+    } catch(e) { alert('Error: ' + e.message); }
+    finally {
+      btn.disabled = false;
+      document.getElementById('orderBtnText').style.display = 'inline';
+      document.getElementById('orderBtnSpinner').style.display = 'none';
+    }
+  };
+
+  // ── CREATE SUPPLIER ───────────────────────────────────────────
+  window.openNewSupplier = function() {
+    editingId = null;
+    document.getElementById('modalTitle').textContent = 'Nuevo proveedor';
+    ['Nombre','Contacto','Telefono','Email','Direccion','Notas'].forEach(f => {
+      const el = document.getElementById('sup' + f);
+      if (el) el.value = '';
+    });
+    document.getElementById('supplierModal').style.display = 'flex';
+  };
+  document.getElementById('newSupplierBtn')?.addEventListener('click', openNewSupplier);
+
+  window.saveSupplier = async function() {
+    const nombre = document.getElementById('supNombre').value.trim();
+    if (!nombre) { alert('El nombre es requerido.'); return; }
+    const btn = document.getElementById('saveSupplierBtn');
+    btn.disabled = true;
+    document.getElementById('saveBtnText').style.display = 'none';
+    document.getElementById('saveBtnSpinner').style.display = 'inline-block';
+
+    const body = {
+      nombre,
+      contacto: document.getElementById('supContacto').value.trim() || null,
+      telefono: document.getElementById('supTelefono').value.trim() || null,
+      email: document.getElementById('supEmail').value.trim() || null,
+      direccion: document.getElementById('supDireccion').value.trim() || null,
+      notas: document.getElementById('supNotas').value.trim() || null,
+    };
+
+    try {
+      const r = await fetch(`${BACKEND}/suppliers/`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Error'); }
+      closeModal('supplierModal');
+      await loadSuppliers();
+    } catch(e) { alert('Error: ' + e.message); }
+    finally {
+      btn.disabled = false;
+      document.getElementById('saveBtnText').style.display = 'inline';
+      document.getElementById('saveBtnSpinner').style.display = 'none';
+    }
+  };
+
+  // ── UPDATE / DELETE ───────────────────────────────────────────
+  window.updateSupplier = async function() {
+    if (!currentSupplier) return;
+    const body = {
+      nombre: document.getElementById('editNombre').value.trim(),
+      contacto: document.getElementById('editContacto').value.trim() || null,
+      telefono: document.getElementById('editTelefono').value.trim() || null,
+      email: document.getElementById('editEmail').value.trim() || null,
+      direccion: document.getElementById('editDireccion').value.trim() || null,
+      notas: document.getElementById('editNotas').value.trim() || null,
+    };
+    try {
+      const r = await fetch(`${BACKEND}/suppliers/${currentSupplier.id}`, { method: 'PUT', headers: headers(), body: JSON.stringify(body) });
+      if (!r.ok) throw new Error((await r.json()).detail);
+      currentSupplier = await r.json();
+      document.getElementById('detailName').textContent = currentSupplier.nombre;
+      await loadSuppliers();
+      alert('✅ Proveedor actualizado.');
+    } catch(e) { alert('Error: ' + e.message); }
+  };
+
+  window.deleteSupplier = async function() {
+    if (!confirm(`¿Desactivar al proveedor ${currentSupplier?.nombre}?`)) return;
+    try {
+      await fetch(`${BACKEND}/suppliers/${currentSupplier.id}`, { method: 'DELETE', headers: headers() });
+      closeModal('detailModal');
+      await loadSuppliers();
+    } catch(e) { alert('Error al desactivar'); }
+  };
+
+  // ── TABS ─────────────────────────────────────────────────────
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => activateTab(tab.dataset.tab));
+  });
+
+  function activateTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    document.getElementById('tabCatalog').style.display = name === 'catalog' ? 'block' : 'none';
+    document.getElementById('tabHistory').style.display = name === 'history' ? 'block' : 'none';
+    if (document.getElementById('tabEdit')) document.getElementById('tabEdit').style.display = name === 'edit' ? 'block' : 'none';
+  }
+
+  // ── HELPERS ──────────────────────────────────────────────────
+  window.openDetail = openDetail;
+  window.closeModal = function(id) { document.getElementById(id).style.display = 'none'; };
+
+  init();
+</script>
+
+<style>
+  /* PAGE */
+  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.75rem; flex-wrap:wrap; gap:1rem; }
+  .page-title { font-family:var(--font-display,'Playfair Display',serif); font-size:1.75rem; font-weight:700; color:var(--navy,#0d1b2e); }
+  .page-sub { font-size:0.875rem; color:var(--gray-400,#94a3b8); margin-top:0.25rem; }
+
+  /* STATES */
+  .state-box { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4rem 2rem; text-align:center; gap:0.75rem; background:white; border-radius:16px; border:1.5px dashed var(--gray-200,#e2e8f0); color:var(--gray-600,#475569); }
+  @keyframes spin-s { to { transform:rotate(360deg); } }
+  .state-spinner { width:36px; height:36px; border:3px solid var(--gray-200,#e2e8f0); border-top-color:var(--blue,#1d4ed8); border-radius:50%; animation:spin-s 0.8s linear infinite; }
+
+  /* GRID */
+  .suppliers-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1.25rem; }
+  .supplier-card { background:white; border-radius:16px; padding:1.5rem; border:1px solid rgba(0,0,0,0.07); box-shadow:0 2px 8px rgba(13,27,46,0.08); cursor:pointer; transition:all 0.2s; display:flex; flex-direction:column; gap:1rem; }
+  .supplier-card:hover { transform:translateY(-3px); box-shadow:0 8px 24px rgba(13,27,46,0.13); }
+  .supplier-card-top { display:flex; gap:1rem; align-items:center; }
+  .supplier-avatar { width:48px; height:48px; border-radius:12px; background:linear-gradient(135deg,var(--blue-dark,#1a3560),var(--navy,#0d1b2e)); color:white; display:flex; align-items:center; justify-content:center; font-size:1.25rem; font-weight:700; flex-shrink:0; }
+  .supplier-name { font-weight:700; font-size:1rem; color:var(--navy,#0d1b2e); margin-bottom:2px; }
+  .supplier-contact { font-size:0.8rem; color:var(--gray-400,#94a3b8); }
+  .supplier-tags { display:flex; gap:0.4rem; flex-wrap:wrap; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.72rem; font-weight:600; }
+  .tag-blue { background:#eff6ff; color:#2563eb; }
+  .tag-gray { background:#f8fafc; color:#475569; border:1px solid #e2e8f0; }
+  .supplier-stats { display:flex; align-items:center; gap:1.25rem; padding:0.875rem 0; border-top:1px solid var(--gray-100,#f1f5f9); border-bottom:1px solid var(--gray-100,#f1f5f9); }
+  .sup-stat { text-align:center; }
+  .sup-stat-val { font-size:1.35rem; font-weight:700; color:var(--navy,#0d1b2e); font-family:var(--font-display,'Playfair Display',serif); }
+  .sup-stat-lbl { font-size:0.72rem; color:var(--gray-400,#94a3b8); }
+  .sup-stat-divider { width:1px; height:32px; background:var(--gray-200,#e2e8f0); }
+  .supplier-detail-btn { background:none; border:1.5px solid var(--gray-200,#e2e8f0); border-radius:8px; padding:0.4rem 0.875rem; font-size:0.8rem; font-weight:600; color:var(--gray-600,#475569); cursor:pointer; align-self:flex-end; transition:all 0.15s; }
+  .supplier-detail-btn:hover { border-color:var(--blue,#2563eb); color:var(--blue,#2563eb); }
+
+  /* MODALS */
+  .modal-overlay { position:fixed; inset:0; background:rgba(13,27,46,0.65); backdrop-filter:blur(4px); z-index:8000; display:flex; align-items:center; justify-content:center; padding:1rem; }
+  .modal-box { background:white; border-radius:20px; box-shadow:0 20px 60px rgba(0,0,0,0.25); width:100%; overflow:hidden; animation:slideUp 0.22s ease; display:flex; flex-direction:column; max-height:92vh; }
+  .modal-lg { max-width:560px; }
+  .modal-xl { max-width:820px; }
+  @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
+  .modal-header { display:flex; align-items:center; justify-content:space-between; padding:1.25rem 1.5rem; border-bottom:1px solid #f1f5f9; flex-shrink:0; gap:1rem; }
+  .modal-title { font-family:var(--font-display,'Playfair Display',serif); font-size:1.25rem; font-weight:700; color:var(--navy,#0d1b2e); }
+  .modal-meta { font-size:0.82rem; color:var(--gray-400,#94a3b8); margin-top:2px; }
+  .modal-close { width:32px; height:32px; border-radius:50%; background:#f1f5f9; border:none; cursor:pointer; font-size:0.8rem; flex-shrink:0; }
+  .modal-body { padding:1.5rem; overflow-y:auto; flex:1; }
+  .modal-footer { display:flex; justify-content:flex-end; gap:0.75rem; padding:1rem 1.5rem; border-top:1px solid #f1f5f9; flex-shrink:0; }
+
+  /* TABS */
+  .tab-bar { display:flex; gap:0; border-bottom:2px solid #f1f5f9; flex-shrink:0; padding:0 1.5rem; }
+  .tab { background:none; border:none; padding:0.875rem 1.125rem; font-size:0.875rem; font-weight:600; color:#94a3b8; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all 0.15s; font-family:inherit; }
+  .tab.active { color:#2563eb; border-bottom-color:#2563eb; }
+  .tab-content { padding:1.5rem; overflow-y:auto; }
+
+  /* FORMS */
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  .form-group { display:flex; flex-direction:column; gap:0.35rem; }
+  .form-group.span2 { grid-column:span 2; }
+  .form-label { font-size:0.78rem; font-weight:600; color:#475569; text-transform:uppercase; letter-spacing:0.04em; }
+  .form-input { padding:0.625rem 0.875rem; border:1.5px solid #e2e8f0; border-radius:8px; font-size:0.875rem; font-family:inherit; color:#0d1b2e; transition:border-color 0.15s; }
+  .form-input:focus { outline:none; border-color:#2563eb; }
+  textarea.form-input { resize:vertical; }
+
+  /* CATALOG */
+  .catalog-actions { margin-bottom:1.25rem; padding-bottom:1.25rem; border-bottom:1px solid #f1f5f9; }
+  .section-sub { font-size:0.82rem; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.625rem; }
+  .catalog-add-row { display:flex; gap:0.625rem; align-items:center; flex-wrap:wrap; }
+  .catalog-table { width:100%; border-collapse:collapse; font-size:0.875rem; }
+  .catalog-table th { background:#f8fafc; text-align:left; padding:0.625rem 0.875rem; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:#94a3b8; font-weight:600; }
+  .catalog-table td { padding:0.875rem 0.875rem; border-bottom:1px solid #f8fafc; color:#0d1b2e; vertical-align:middle; }
+  .catalog-table tr:last-child td { border-bottom:none; }
+  .isbn-small { font-size:0.72rem; color:#94a3b8; }
+  .stock-badge { display:inline-block; padding:2px 10px; border-radius:999px; font-weight:700; font-size:0.78rem; }
+  .stock-badge.ok { background:#dcfce7; color:#16a34a; }
+  .stock-badge.low { background:#fef2f2; color:#dc2626; }
+  .btn-icon-del { background:none; border:none; cursor:pointer; font-size:1rem; opacity:0.45; padding:4px; border-radius:6px; }
+  .btn-icon-del:hover { opacity:1; background:#fef2f2; }
+  .empty-catalog { color:#94a3b8; font-size:0.875rem; padding:2rem 0; text-align:center; }
+
+  /* ORDER */
+  .order-items { display:flex; flex-direction:column; gap:0.75rem; max-height:360px; overflow-y:auto; }
+  .order-item { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:0.875rem; background:#f8fafc; border-radius:10px; border:1px solid #e2e8f0; }
+  .order-item-info { flex:1; min-width:0; }
+  .order-item-info strong { display:block; font-size:0.9rem; color:#0d1b2e; margin-bottom:2px; }
+  .order-item-meta { font-size:0.78rem; color:#94a3b8; }
+  .order-item-qty { display:flex; flex-direction:column; gap:0.25rem; align-items:center; flex-shrink:0; }
+  .order-total-row { display:flex; justify-content:space-between; align-items:center; margin-top:1rem; padding:0.875rem 1rem; background:#eff6ff; border-radius:8px; border:1.5px solid #bfdbfe; font-size:0.9rem; color:#1d4ed8; }
+  .order-total-row strong { font-size:1.1rem; }
+  .order-empty { text-align:center; padding:2rem; color:#94a3b8; }
+
+  /* HISTORY */
+  .history-list { padding:1rem 0; }
+
+  /* BUTTONS */
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; padding:0.625rem 1.25rem; border-radius:8px; font-weight:600; font-size:0.875rem; cursor:pointer; border:none; transition:all 0.2s; font-family:inherit; text-decoration:none; }
+  .btn-primary { background:#2563eb; color:white; }
+  .btn-primary:hover:not(:disabled) { background:#1d4ed8; }
+  .btn-primary:disabled { opacity:0.6; cursor:not-allowed; }
+  .btn-secondary { background:#f1f5f9; color:#475569; border:1.5px solid #e2e8f0; }
+  .btn-secondary:hover { background:#e2e8f0; }
+  .btn-danger { background:#fef2f2; color:#dc2626; border:1.5px solid #fecaca; }
+  .btn-danger:hover { background:#fee2e2; }
+  .btn-sm { padding:0.4rem 0.875rem; font-size:0.8rem; }
+  .spinner { width:16px; height:16px; border:2px solid rgba(255,255,255,0.3); border-top-color:white; border-radius:50%; animation:spin-s 0.7s linear infinite; }
+</style>

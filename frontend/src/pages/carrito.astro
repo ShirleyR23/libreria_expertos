@@ -1,0 +1,432 @@
+---
+import PublicLayout from '../layouts/PublicLayout.astro';
+
+const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const token = Astro.cookies.get('token')?.value;
+const userStr = Astro.cookies.get('user')?.value;
+let user = null;
+try { user = userStr ? JSON.parse(decodeURIComponent(userStr)) : null; } catch (e) {}
+const isCliente = user?.role_name === 'CLIENTE';
+const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.role_name === 'EMPLEADO' ? '/dashboard-empleado' : '/mis-compras';
+---
+
+<PublicLayout title="Carrito de compras">
+
+  <!-- NAV -->
+  <nav class="top-nav">
+    <div class="nav-inner">
+      <a href="/catalogo" class="brand">
+        <div class="brand-icon">📚</div>
+        <span class="brand-name">Librería</span>
+      </a>
+      <div class="nav-actions">
+        {user ? (
+          <>
+            <span class="nav-greeting">Hola, <strong>{user.nombre}</strong></span>
+            <a href={dashboardUrl} class="btn btn-sm btn-outline-nav">Mi cuenta</a>
+            <button id="logoutBtn" class="btn btn-sm btn-ghost-nav">Salir</button>
+          </>
+        ) : (
+          <>
+            <a href="/login" class="btn btn-sm btn-ghost-nav">Iniciar sesión</a>
+            <a href="/register" class="btn btn-sm btn-primary">Registrarse</a>
+          </>
+        )}
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="cart-main">
+    <div class="cart-container">
+
+      <!-- LEFT: Cart items -->
+      <div class="cart-left">
+        <div class="cart-header">
+          <h1 class="cart-title">🛒 Tu carrito</h1>
+          <button id="clearCartBtn" class="btn-clear-cart" style="display:none">Vaciar carrito</button>
+        </div>
+
+        <div id="cartEmpty" class="cart-empty" style="display:none">
+          <div class="cart-empty-icon">🛒</div>
+          <h3>Tu carrito está vacío</h3>
+          <p>Agrega libros desde el catálogo para empezar.</p>
+          <a href="/catalogo" class="btn btn-primary" style="margin-top:1rem">Explorar catálogo</a>
+        </div>
+
+        <div id="cartItems" class="cart-items"></div>
+      </div>
+
+      <!-- RIGHT: Summary + checkout -->
+      <div class="cart-right">
+        <div class="cart-summary" id="cartSummary" style="display:none">
+          <h2 class="summary-title">Resumen del pedido</h2>
+
+          <div class="summary-rows" id="summaryRows"></div>
+
+          <div class="summary-divider"></div>
+          <div class="summary-total-row">
+            <span>Subtotal</span>
+            <span id="summarySubtotal">L 0.00</span>
+          </div>
+          <div class="summary-total-row muted">
+            <span>ISV (15%)</span>
+            <span id="summaryTax">L 0.00</span>
+          </div>
+          <div class="summary-total-row grand">
+            <span>Total</span>
+            <span id="summaryTotal">L 0.00</span>
+          </div>
+
+          <!-- Login required notice -->
+          <div id="loginNotice" class="login-notice" style="display:none">
+            <p>Debes <a href="/login">iniciar sesión</a> para completar tu compra.</p>
+          </div>
+
+          <!-- Payment method (only for logged-in clients) -->
+          <div id="paySection" style="display:none">
+            <div class="pay-section-title">Método de pago</div>
+            <div class="pay-method-grid">
+              <label class="pay-method-opt">
+                <input type="radio" name="cartPayMethod" value="efectivo" checked>
+                <span class="pay-method-card">💵 Efectivo</span>
+              </label>
+              <label class="pay-method-opt">
+                <input type="radio" name="cartPayMethod" value="tarjeta">
+                <span class="pay-method-card">💳 Tarjeta</span>
+              </label>
+              <label class="pay-method-opt">
+                <input type="radio" name="cartPayMethod" value="transferencia">
+                <span class="pay-method-card">🏦 Transferencia</span>
+              </label>
+            </div>
+
+            <div class="form-group" style="margin:0.75rem 0 0">
+              <label class="form-label" style="font-size:0.78rem">RTN <span class="muted-label">(opcional)</span></label>
+              <input type="text" id="checkoutRtn" class="form-input" placeholder="0000-0000-000000" maxlength="20">
+            </div>
+
+            <button id="checkoutBtn" class="btn btn-primary btn-full checkout-btn">
+              <span id="checkoutBtnText">Confirmar compra</span>
+              <span id="checkoutSpinner" class="spinner" style="display:none"></span>
+            </button>
+          </div>
+
+          <a href="/catalogo" class="continue-shopping">← Seguir comprando</a>
+        </div>
+
+        <!-- Digital notice -->
+        <div class="digital-notice" id="digitalNotice" style="display:none">
+          <span>📱</span>
+          <div>
+            <strong>Compra digital</strong>
+            <p>Los libros quedarán disponibles en "Mis Libros" para leer cuando quieras.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- SUCCESS MODAL -->
+  <div id="successModal" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <div class="modal-success-icon">✅</div>
+      <h2 class="modal-title">¡Compra completada!</h2>
+      <p class="modal-desc" id="successDesc">Tu pedido ha sido procesado.</p>
+      <div style="display:flex;gap:0.75rem;justify-content:center;margin-top:1.5rem;">
+        <a href="/mis-libros" class="btn btn-primary">📚 Mis libros</a>
+        <a href="/catalogo" class="btn btn-secondary">Seguir comprando</a>
+      </div>
+    </div>
+  </div>
+
+</PublicLayout>
+
+<script is:inline define:vars={{ API_URL, isCliente }}>
+  const BACKEND = API_URL || 'http://localhost:8000/api/v1';
+  const BACKEND_BASE = 'http://localhost:8000';
+  const CART_KEY = 'libreria_cart';
+
+  // ── CART HELPERS ─────────────────────────────────────────────
+  function getCart() {
+    try { return JSON.parse(localStorage.getItem(CART_KEY) || '[]'); }
+    catch { return []; }
+  }
+  function saveCart(cart) {
+    localStorage.setItem(CART_KEY, JSON.stringify(cart));
+    updateCartBadge();
+  }
+  function addToCart(book) {
+    const cart = getCart();
+    const idx = cart.findIndex(i => i.id === book.id);
+    if (idx >= 0) { cart[idx].qty = (cart[idx].qty || 1) + 1; }
+    else { cart.push({ ...book, qty: 1 }); }
+    saveCart(cart);
+  }
+  function removeFromCart(bookId) {
+    saveCart(getCart().filter(i => i.id !== bookId));
+    renderCart();
+  }
+  function updateQty(bookId, qty) {
+    const cart = getCart().map(i => i.id === bookId ? { ...i, qty: Math.max(1, qty) } : i);
+    saveCart(cart);
+    renderCart();
+  }
+  function clearCart() {
+    saveCart([]);
+    renderCart();
+  }
+  function updateCartBadge() {
+    const cart = getCart();
+    const total = cart.reduce((s, i) => s + (i.qty || 1), 0);
+    document.querySelectorAll('.cart-badge').forEach(el => {
+      el.textContent = total;
+      el.style.display = total > 0 ? 'inline-flex' : 'none';
+    });
+  }
+
+  // ── RENDER ───────────────────────────────────────────────────
+  function renderCart() {
+    const cart = getCart();
+    const itemsEl = document.getElementById('cartItems');
+    const emptyEl = document.getElementById('cartEmpty');
+    const summaryEl = document.getElementById('cartSummary');
+    const clearBtn = document.getElementById('clearCartBtn');
+    const digitalNotice = document.getElementById('digitalNotice');
+    const loginNotice = document.getElementById('loginNotice');
+    const paySection = document.getElementById('paySection');
+
+    if (cart.length === 0) {
+      itemsEl.innerHTML = '';
+      emptyEl.style.display = 'flex';
+      summaryEl.style.display = 'none';
+      clearBtn.style.display = 'none';
+      digitalNotice.style.display = 'none';
+      return;
+    }
+
+    emptyEl.style.display = 'none';
+    summaryEl.style.display = 'block';
+    clearBtn.style.display = 'inline-flex';
+    digitalNotice.style.display = 'flex';
+
+    // Show correct section based on auth
+    if (isCliente) {
+      loginNotice.style.display = 'none';
+      paySection.style.display = 'block';
+    } else {
+      loginNotice.style.display = 'block';
+      paySection.style.display = 'none';
+    }
+
+    itemsEl.innerHTML = cart.map(item => {
+      const price = parseFloat(item.precio);
+      const qty = item.qty || 1;
+      const subtotal = price * qty;
+      const imgUrl = item.imagen_url ? `${BACKEND_BASE}${item.imagen_url}` : '';
+      return `
+        <div class="cart-item" data-id="${item.id}">
+          <div class="cart-item-cover">
+            ${imgUrl
+              ? `<img src="${imgUrl}" alt="${item.nombre}" class="cart-item-img" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
+              : ''}
+            <div class="cart-item-placeholder" style="display:${imgUrl ? 'none' : 'flex'}">📖</div>
+          </div>
+          <div class="cart-item-info">
+            <h3 class="cart-item-name">${item.nombre}</h3>
+            <p class="cart-item-author">✍️ ${item.autor || ''}</p>
+            <p class="cart-item-price">L ${price.toFixed(2)} c/u</p>
+          </div>
+          <div class="cart-item-controls">
+            <div class="qty-control">
+              <button class="qty-btn" onclick="updateQty(${item.id}, ${qty - 1})" ${qty <= 1 ? 'disabled' : ''}>−</button>
+              <span class="qty-val">${qty}</span>
+              <button class="qty-btn" onclick="updateQty(${item.id}, ${qty + 1})" ${qty >= item.stock ? 'disabled' : ''}>+</button>
+            </div>
+            <p class="cart-item-subtotal">L ${subtotal.toFixed(2)}</p>
+            <button class="cart-item-remove" onclick="removeFromCart(${item.id})">🗑</button>
+          </div>
+        </div>`;
+    }).join('');
+
+    // Summary
+    const subtotal = cart.reduce((s, i) => s + parseFloat(i.precio) * (i.qty || 1), 0);
+    const tax = subtotal * 0.15;
+    const total = subtotal + tax;
+    document.getElementById('summarySubtotal').textContent = `L ${subtotal.toFixed(2)}`;
+    document.getElementById('summaryTax').textContent = `L ${tax.toFixed(2)}`;
+    document.getElementById('summaryTotal').textContent = `L ${total.toFixed(2)}`;
+
+    const summaryRows = document.getElementById('summaryRows');
+    summaryRows.innerHTML = cart.map(i =>
+      `<div class="summary-item-row"><span>${i.nombre} ×${i.qty || 1}</span><span>L ${(parseFloat(i.precio) * (i.qty || 1)).toFixed(2)}</span></div>`
+    ).join('');
+  }
+
+  // ── CHECKOUT ─────────────────────────────────────────────────
+  document.getElementById('checkoutBtn')?.addEventListener('click', async () => {
+    const cart = getCart();
+    if (cart.length === 0) return;
+    const btn = document.getElementById('checkoutBtn');
+    const txt = document.getElementById('checkoutBtnText');
+    const spin = document.getElementById('checkoutSpinner');
+    btn.disabled = true;
+    txt.style.display = 'none';
+    spin.style.display = 'inline-block';
+
+    try {
+      const tok = localStorage.getItem('token');
+      const pm = document.querySelector('input[name="cartPayMethod"]:checked')?.value || 'efectivo';
+      const rtn = document.getElementById('checkoutRtn')?.value.trim() || '';
+      let notas = `Pedido desde carrito | Pago: ${pm.charAt(0).toUpperCase() + pm.slice(1)}`;
+      if (rtn) notas += ` | RTN: ${rtn}`;
+
+      const r = await fetch(`${BACKEND}/sales/online`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tok}` },
+        body: JSON.stringify({
+          tipo: 'ONLINE',
+          items: cart.map(i => ({ libro_id: i.id, cantidad: i.qty || 1 })),
+          notas,
+        })
+      });
+      if (!r.ok) {
+        const d = await r.json();
+        throw new Error(Array.isArray(d.detail) ? d.detail.map(e => e.msg).join(', ') : (d.detail || 'Error al procesar'));
+      }
+      clearCart();
+      const total = cart.reduce((s, i) => s + parseFloat(i.precio) * (i.qty || 1), 0);
+      document.getElementById('successDesc').textContent =
+        `Compraste ${cart.length} libro${cart.length > 1 ? 's' : ''} por un total de L ${(total * 1.15).toFixed(2)}. Ya están disponibles en tu biblioteca.`;
+      document.getElementById('successModal').style.display = 'flex';
+    } catch(e) {
+      alert('Error: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      txt.style.display = 'inline';
+      spin.style.display = 'none';
+    }
+  });
+
+  document.getElementById('clearCartBtn')?.addEventListener('click', () => {
+    if (confirm('¿Vaciar el carrito?')) clearCart();
+  });
+
+  document.getElementById('logoutBtn')?.addEventListener('click', () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    document.cookie = 'user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    window.location.href = '/catalogo';
+  });
+
+  // Make helpers global
+  window.removeFromCart = removeFromCart;
+  window.updateQty = updateQty;
+
+  renderCart();
+  updateCartBadge();
+</script>
+
+<style is:global>
+  /* NAV */
+  .top-nav { position:sticky; top:0; z-index:200; background:rgba(13,27,46,0.96); backdrop-filter:blur(10px); border-bottom:1px solid rgba(255,255,255,0.08); }
+  .nav-inner { max-width:1400px; margin:0 auto; padding:0 2rem; display:flex; align-items:center; justify-content:space-between; height:64px; }
+  .brand { display:flex; align-items:center; gap:0.75rem; text-decoration:none; }
+  .brand-icon { font-size:1.6rem; }
+  .brand-name { font-family:var(--font-display,'Playfair Display',serif); font-size:1.35rem; font-weight:700; color:white; }
+  .nav-actions { display:flex; align-items:center; gap:0.75rem; }
+  .nav-greeting { color:rgba(255,255,255,0.7); font-size:0.875rem; }
+  .btn-outline-nav { border:1.5px solid rgba(255,255,255,0.4); color:white; background:transparent; }
+  .btn-outline-nav:hover { background:rgba(255,255,255,0.1); }
+  .btn-ghost-nav { background:transparent; color:rgba(255,255,255,0.7); }
+  .btn-ghost-nav:hover { color:white; }
+
+  /* CART LAYOUT */
+  body { background:#eef1f7; }
+  .cart-main { max-width:1100px; margin:0 auto; padding:2.5rem 1.5rem; }
+  .cart-container { display:grid; grid-template-columns:1fr 360px; gap:2rem; align-items:start; }
+  @media(max-width:820px) { .cart-container { grid-template-columns:1fr; } }
+
+  /* LEFT */
+  .cart-left { }
+  .cart-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+  .cart-title { font-family:'Playfair Display',serif; font-size:1.75rem; font-weight:700; color:#0d1b2e; }
+  .btn-clear-cart { background:none; border:1.5px solid #fca5a5; color:#dc2626; border-radius:6px; padding:0.35rem 0.85rem; font-size:0.8rem; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:0.4rem; }
+  .btn-clear-cart:hover { background:#fef2f2; }
+
+  .cart-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:4rem 2rem; background:white; border-radius:16px; border:1.5px dashed #e2e8f0; gap:0.75rem; }
+  .cart-empty-icon { font-size:3.5rem; }
+  .cart-empty h3 { font-size:1.25rem; font-weight:700; color:#0d1b2e; }
+  .cart-empty p { color:#94a3b8; }
+
+  .cart-items { display:flex; flex-direction:column; gap:1rem; }
+  .cart-item { background:white; border-radius:12px; padding:1.25rem; display:flex; gap:1.25rem; align-items:center; box-shadow:0 2px 8px rgba(13,27,46,0.08); border:1px solid rgba(13,27,46,0.06); }
+  .cart-item-cover { width:70px; height:95px; flex-shrink:0; border-radius:8px; overflow:hidden; background:#f1f5f9; }
+  .cart-item-img { width:100%; height:100%; object-fit:cover; }
+  .cart-item-placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:1.75rem; background:linear-gradient(135deg,#1a3560,#0d1b2e); }
+  .cart-item-info { flex:1; min-width:0; }
+  .cart-item-name { font-family:'Playfair Display',serif; font-size:1rem; font-weight:700; color:#0d1b2e; margin-bottom:0.25rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .cart-item-author { font-size:0.8rem; color:#94a3b8; margin-bottom:0.5rem; }
+  .cart-item-price { font-size:0.875rem; color:#2563eb; font-weight:600; }
+  .cart-item-controls { display:flex; flex-direction:column; align-items:flex-end; gap:0.625rem; flex-shrink:0; }
+  .qty-control { display:flex; align-items:center; gap:0.5rem; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:8px; padding:0.25rem 0.5rem; }
+  .qty-btn { background:none; border:none; width:24px; height:24px; cursor:pointer; font-size:1.1rem; font-weight:700; color:#475569; display:flex; align-items:center; justify-content:center; border-radius:4px; }
+  .qty-btn:hover:not(:disabled) { background:#e2e8f0; }
+  .qty-btn:disabled { opacity:0.35; cursor:default; }
+  .qty-val { font-weight:700; font-size:0.9rem; color:#0d1b2e; min-width:20px; text-align:center; }
+  .cart-item-subtotal { font-weight:700; font-size:1rem; color:#0d1b2e; }
+  .cart-item-remove { background:none; border:none; cursor:pointer; font-size:1.1rem; opacity:0.5; padding:4px; border-radius:6px; }
+  .cart-item-remove:hover { opacity:1; background:#fef2f2; }
+
+  /* RIGHT - SUMMARY */
+  .cart-right { position:sticky; top:80px; display:flex; flex-direction:column; gap:1rem; }
+  .cart-summary { background:white; border-radius:16px; padding:1.5rem; box-shadow:0 4px 20px rgba(13,27,46,0.1); border:1px solid rgba(13,27,46,0.07); }
+  .summary-title { font-family:'Playfair Display',serif; font-size:1.25rem; font-weight:700; color:#0d1b2e; margin-bottom:1.25rem; }
+  .summary-rows { display:flex; flex-direction:column; gap:0.35rem; margin-bottom:1rem; max-height:160px; overflow-y:auto; }
+  .summary-item-row { display:flex; justify-content:space-between; font-size:0.82rem; color:#475569; gap:0.5rem; }
+  .summary-item-row span:first-child { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .summary-divider { height:1px; background:#f1f5f9; margin:0.75rem 0; }
+  .summary-total-row { display:flex; justify-content:space-between; align-items:center; font-size:0.9rem; color:#475569; padding:0.3rem 0; }
+  .summary-total-row.muted { font-size:0.82rem; color:#94a3b8; }
+  .summary-total-row.grand { font-size:1.15rem; font-weight:700; color:#0d1b2e; margin-top:0.5rem; padding-top:0.75rem; border-top:2px solid #e2e8f0; }
+  .login-notice { background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:10px; padding:0.875rem 1rem; font-size:0.85rem; color:#1d4ed8; margin:1rem 0 0; text-align:center; }
+  .login-notice a { color:#1d4ed8; font-weight:700; }
+  .pay-section-title { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#94a3b8; margin:1.25rem 0 0.5rem; }
+  .pay-method-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:0.5rem; margin-bottom:0.75rem; }
+  .pay-method-opt { cursor:pointer; }
+  .pay-method-opt input { display:none; }
+  .pay-method-card { display:flex; align-items:center; justify-content:center; padding:0.55rem; border:1.5px solid #e2e8f0; border-radius:8px; font-size:0.78rem; font-weight:600; transition:all 0.15s; background:white; gap:0.3rem; }
+  .pay-method-opt input:checked + .pay-method-card { border-color:#2563eb; background:#eff6ff; color:#2563eb; }
+  .checkout-btn { margin-top:1.25rem; padding:0.875rem; font-size:1rem; border-radius:10px; }
+  .continue-shopping { display:block; text-align:center; font-size:0.82rem; color:#94a3b8; margin-top:1rem; text-decoration:none; }
+  .continue-shopping:hover { color:#475569; }
+  .muted-label { color:#94a3b8; font-weight:400; }
+
+  .digital-notice { background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:12px; padding:1rem 1.25rem; display:flex; gap:0.875rem; align-items:flex-start; font-size:0.85rem; }
+  .digital-notice span { font-size:1.5rem; flex-shrink:0; }
+  .digital-notice strong { display:block; color:#1d4ed8; font-weight:700; margin-bottom:2px; }
+  .digital-notice p { color:#3b82f6; line-height:1.4; }
+
+  /* MODAL */
+  .modal-overlay { position:fixed; inset:0; background:rgba(13,27,46,0.65); backdrop-filter:blur(4px); z-index:8000; display:flex; align-items:center; justify-content:center; padding:1rem; }
+  .modal-box { background:white; border-radius:20px; padding:2.5rem 2rem; text-align:center; max-width:400px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.3); animation:slideUp 0.25s ease; }
+  @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
+  .modal-success-icon { font-size:3.5rem; margin-bottom:1rem; }
+  .modal-title { font-family:'Playfair Display',serif; font-size:1.5rem; font-weight:700; color:#0d1b2e; margin-bottom:0.75rem; }
+  .modal-desc { color:#475569; font-size:0.9rem; line-height:1.6; }
+
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; padding:0.625rem 1.25rem; border-radius:8px; font-weight:600; font-size:0.875rem; cursor:pointer; text-decoration:none; border:none; transition:all 0.2s; font-family:inherit; }
+  .btn-primary { background:#2563eb; color:white; }
+  .btn-primary:hover { background:#1d4ed8; }
+  .btn-secondary { background:#f1f5f9; color:#475569; border:1.5px solid #e2e8f0; }
+  .btn-secondary:hover { background:#e2e8f0; }
+  .btn-full { width:100%; }
+  .btn-sm { padding:0.4rem 0.875rem; font-size:0.8rem; }
+  .form-group { display:flex; flex-direction:column; gap:0.35rem; }
+  .form-label { font-size:0.78rem; font-weight:600; color:#475569; }
+  .form-input { padding:0.6rem 0.875rem; border:1.5px solid #e2e8f0; border-radius:8px; font-size:0.875rem; font-family:inherit; color:#0d1b2e; transition:border-color 0.15s; }
+  .form-input:focus { outline:none; border-color:#2563eb; }
+  .spinner { width:16px; height:16px; border:2px solid rgba(255,255,255,0.3); border-top-color:white; border-radius:50%; animation:spin 0.7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>

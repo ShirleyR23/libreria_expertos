@@ -10,19 +10,31 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     """Configuración de la aplicación cargada desde variables de entorno."""
-    
+
     # Base de datos - SQLite por defecto para desarrollo local
     # PostgreSQL cuando se usa Docker
     DATABASE_URL: str = "sqlite:///./libreria.db"
-    
+
     # JWT Configuration
     SECRET_KEY: str = "tu-clave-secreta-super-segura-cambia-esto-en-produccion"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    
+
+    # Password Reset
+    PASSWORD_RESET_EXPIRE_MINUTES: int = 30
+    FRONTEND_URL: str = "http://localhost:4321"
+
+    # SMTP / Email (Gmail por defecto)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    EMAIL_FROM: str = ""
+    EMAIL_FROM_NAME: str = "Librería"
+
     # Entorno
     ENVIRONMENT: str = "development"
-    
+
     class Config:
         env_file = ".env"
         case_sensitive = True

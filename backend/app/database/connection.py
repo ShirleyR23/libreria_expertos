@@ -54,6 +54,7 @@ def init_db() -> None:
     from app.models.book import Book, BookCategory
     from app.models.sale import Sale, SaleItem, Invoice
     from app.models.purchase import Purchase, PurchaseItem
+    from app.models.supplier import Supplier, SupplierBook
 
     # Crear tablas nuevas (no modifica las existentes)
     Base.metadata.create_all(bind=engine)
@@ -118,6 +119,61 @@ def _run_migrations() -> None:
                     print("✅ Migración: columna precio_original agregada a libros")
         except Exception as e:
             print(f"⚠️ Migración precio_original: {e}")
+
+        # Migración: supplier_id en compras (referencia a proveedores)
+        try:
+            if is_sqlite:
+                from sqlalchemy import text
+                result = conn.execute(text("PRAGMA table_info(compras)"))
+                columns = [row[1] for row in result.fetchall()]
+                if "supplier_id" not in columns:
+                    # SQLite no soporta FK en ALTER TABLE, se agrega sin FK
+                    conn.execute(text("ALTER TABLE compras ADD COLUMN supplier_id INTEGER"))
+                    conn.commit()
+                    print("✅ Migración: columna supplier_id agregada a compras")
+            else:
+                from sqlalchemy import text
+                result = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='compras' AND column_name='supplier_id'"
+                ))
+                if not result.fetchone():
+                    conn.execute(text(
+                        "ALTER TABLE compras ADD COLUMN supplier_id INTEGER "
+                        "REFERENCES proveedores(id)"
+                    ))
+                    conn.commit()
+                    print("✅ Migración: columna supplier_id agregada a compras")
+        except Exception as e:
+            print(f"⚠️ Migración supplier_id: {e}")
+
+        # Migración: pdf_url y pdf_preview_pages en libros
+        try:
+            if is_sqlite:
+                from sqlalchemy import text
+                result = conn.execute(text("PRAGMA table_info(libros)"))
+                columns = [row[1] for row in result.fetchall()]
+                if "pdf_url" not in columns:
+                    conn.execute(text("ALTER TABLE libros ADD COLUMN pdf_url VARCHAR(500)"))
+                    conn.commit()
+                    print("✅ Migración: columna pdf_url agregada a libros")
+                if "pdf_preview_pages" not in columns:
+                    conn.execute(text("ALTER TABLE libros ADD COLUMN pdf_preview_pages INTEGER DEFAULT 3"))
+                    conn.commit()
+                    print("✅ Migración: columna pdf_preview_pages agregada a libros")
+            else:
+                from sqlalchemy import text
+                for col, definition in [("pdf_url", "VARCHAR(500)"), ("pdf_preview_pages", "INTEGER DEFAULT 3")]:
+                    result = conn.execute(text(
+                        f"SELECT column_name FROM information_schema.columns "
+                        f"WHERE table_name='libros' AND column_name='{col}'"
+                    ))
+                    if not result.fetchone():
+                        conn.execute(text(f"ALTER TABLE libros ADD COLUMN {col} {definition}"))
+                        conn.commit()
+                        print(f"✅ Migración: columna {col} agregada a libros")
+        except Exception as e:
+            print(f"⚠️ Migración pdf_url/pdf_preview_pages: {e}")
 
 
 def seed_initial_data() -> None:

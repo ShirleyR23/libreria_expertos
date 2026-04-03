@@ -23,6 +23,7 @@ from app.api import (
     purchases_router,
     admin_router,
     expert_router,
+    suppliers_router,
 )
 
 settings = get_settings()
@@ -164,6 +165,7 @@ app.include_router(sales_router, prefix="/api/v1")
 app.include_router(purchases_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(expert_router, prefix="/api/v1")
+app.include_router(suppliers_router, prefix="/api/v1")
 
 
 @app.get("/")

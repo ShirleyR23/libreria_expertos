@@ -7,10 +7,11 @@ from app.models.client import Client
 from app.models.book import Book, BookCategory
 from app.models.sale import Sale, SaleItem, Invoice
 from app.models.purchase import Purchase, PurchaseItem
+from app.models.supplier import Supplier, SupplierBook
 
 __all__ = [
     "User",
-    "Role", 
+    "Role",
     "Employee",
     "Client",
     "Book",
@@ -20,4 +21,6 @@ __all__ = [
     "Invoice",
     "Purchase",
     "PurchaseItem",
+    "Supplier",
+    "SupplierBook",
 ]

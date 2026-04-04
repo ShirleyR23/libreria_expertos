@@ -451,7 +451,7 @@ const isAdmin = user.role_name === 'ADMIN';
   // ── ISBN AUTOCOMPLETE ────────────────────────────────────────────────────
   document.getElementById('isbnLookupBtn')?.addEventListener('click', async () => {
     const isbn = document.getElementById('bookIsbn').value.trim();
-    if (!isbn) { alert('Ingresa un ISBN primero'); return; }
+    if (!isbn) { Modal.error('Campo requerido', 'Ingresa un ISBN primero para buscar el libro'); return; }
     const btn    = document.getElementById('isbnLookupBtn');
     const loader = document.getElementById('isbnLoader');
     const msg    = document.getElementById('isbnMsg');

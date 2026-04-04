@@ -43,7 +43,7 @@ class PurchaseResponse(BaseModel):
     proveedor_nombre: str
     proveedor_contacto: Optional[str] = None
     proveedor_telefono: Optional[str] = None
-    empleado_id: int
+    empleado_id: Optional[int] = None
     empleado_nombre: Optional[str] = None
     items: List[PurchaseItemResponse]
     subtotal: Decimal

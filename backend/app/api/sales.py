@@ -11,6 +11,7 @@ from app.schemas.sale import SaleCreate, SaleResponse, SaleItemCreate
 from app.services.sale_service import SaleService
 from app.utils.dependencies import get_current_user, require_empleado, require_cliente, require_any_authenticated
 from app.core.constants import SaleType
+from app.models.audit_log import log_action
 
 router = APIRouter(prefix="/sales", tags=["Ventas"])
 
@@ -37,11 +38,15 @@ def create_online_sale(
         )
     
     sale_service = SaleService(db)
-    return sale_service.create_sale(
+    result = sale_service.create_sale(
         sale_data=sale_data,
         cliente_id=cliente_id,
         empleado_id=None
     )
+    log_action(db, current_user.id, "CREATE_SALE_ONLINE", "sales", result.id,
+               f"Venta online #{result.id} por cliente ID:{cliente_id} total:L.{result.total}")
+    db.commit()
+    return result
 
 
 @router.post("/presencial", response_model=SaleResponse, status_code=status.HTTP_201_CREATED)
@@ -66,11 +71,15 @@ def create_presencial_sale(
         )
     
     sale_service = SaleService(db)
-    return sale_service.create_sale(
+    result = sale_service.create_sale(
         sale_data=sale_data,
         cliente_id=cliente_id,
         empleado_id=empleado_id
     )
+    log_action(db, current_user.id, "CREATE_SALE_PRESENCIAL", "sales", result.id,
+               f"Venta presencial #{result.id} por empleado ID:{empleado_id} total:L.{result.total}")
+    db.commit()
+    return result
 
 
 @router.get("/my-purchases", response_model=List[SaleResponse])
@@ -251,4 +260,8 @@ def cancel_sale(
     Cancela una venta y restaura el stock (empleados y admin).
     """
     sale_service = SaleService(db)
-    return sale_service.cancel_sale(sale_id)
+    result = sale_service.cancel_sale(sale_id)
+    log_action(db, current_user.id, "CANCEL_SALE", "sales", sale_id,
+               f"Venta #{sale_id} cancelada por {current_user.nombre}")
+    db.commit()
+    return result

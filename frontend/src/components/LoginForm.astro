@@ -95,7 +95,33 @@
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Credenciales incorrectas');
+      if (!res.ok) {
+        // FastAPI puede devolver detail como string o como array de errores de validación
+        let msg = 'Correo o contraseña incorrectos. Verifica tus datos e intenta de nuevo.';
+        if (data.detail) {
+          if (typeof data.detail === 'string') {
+            // Traducir posibles mensajes en inglés que escapen el handler
+            const raw = data.detail;
+            if (/not a valid email/i.test(raw) || /must have an @/i.test(raw)) {
+              msg = 'El correo electrónico no es válido.';
+            } else if (/field required/i.test(raw)) {
+              msg = 'Todos los campos son obligatorios.';
+            } else if (/incorrect.*password|wrong.*password|invalid.*credentials/i.test(raw)) {
+              msg = 'Correo o contraseña incorrectos.';
+            } else if (/inactive|inactiv/i.test(raw)) {
+              msg = 'Tu cuenta está inactiva. Contacta al administrador.';
+            } else if (/not found/i.test(raw)) {
+              msg = 'No se encontró una cuenta con ese correo.';
+            } else if (raw.length < 200) {
+              // Mostrar el mensaje del backend solo si es corto y legible
+              msg = raw;
+            }
+          } else if (Array.isArray(data.detail)) {
+            msg = data.detail.map((e: any) => e.msg || JSON.stringify(e)).join(', ');
+          }
+        }
+        throw new Error(msg);
+      }
 
       localStorage.setItem('token', data.access_token);
       localStorage.setItem('user', JSON.stringify(data.user));
@@ -115,8 +141,26 @@
   }
 
   document.getElementById('loginBtn')?.addEventListener('click', () => {
-    const email = (document.getElementById('email') as HTMLInputElement).value;
+    const email = (document.getElementById('email') as HTMLInputElement).value.trim();
     const password = (document.getElementById('password') as HTMLInputElement).value;
+    const err = document.getElementById('errorAlert')!;
+
+    // Validación en el cliente antes de llamar al servidor
+    if (!email) {
+      err.textContent = 'Por favor ingresa tu correo electrónico.';
+      err.style.display = 'block';
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      err.textContent = 'El correo electrónico no es válido (debe contener @ y un dominio).';
+      err.style.display = 'block';
+      return;
+    }
+    if (!password) {
+      err.textContent = 'Por favor ingresa tu contraseña.';
+      err.style.display = 'block';
+      return;
+    }
     doLogin(email, password);
   });
 

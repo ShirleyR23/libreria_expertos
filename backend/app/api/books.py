@@ -16,6 +16,7 @@ from app.schemas.purchase import PurchaseCreate, PurchaseItemCreate
 from app.services.book_service import BookService
 from app.services.purchase_service import PurchaseService
 from app.utils.dependencies import require_empleado, require_admin, require_any_authenticated
+from app.models.audit_log import log_action
 from decimal import Decimal
 
 router = APIRouter(prefix="/books", tags=["Libros"])
@@ -164,7 +165,7 @@ def get_pdf_full_auth(
         raise HTTPException(status_code=404, detail="PDF no disponible")
 
     # Admin/empleado pueden ver cualquier PDF
-    if not current_user.is_cliente():
+    if not current_user.is_cliente:
         pass  # allowed
     else:
         # Verificar que el cliente compró este libro
@@ -259,7 +260,9 @@ def get_inventory(
     db: Session = Depends(get_db)
 ):
     """Inventario completo (solo empleados y admin)."""
-    return BookService(db).get_all_books(skip=skip, limit=limit, solo_disponibles=False)
+    book_service = BookService(db)
+    book_service.recalculate_bestseller()
+    return book_service.get_all_books(skip=skip, limit=limit, solo_disponibles=False)
 
 
 @router.get("/inventory/low-stock", response_model=List[BookResponse])
@@ -326,9 +329,16 @@ def create_book(
         )
         purchase_service.create_purchase(purchase_data, empleado_id)
         db.refresh(new_book)
+        log_action(db, current_user.id, "CREATE_BOOK", "books", new_book.id,
+                   f"Libro creado con compra: '{new_book.nombre}' ISBN:{book_data.isbn}")
+        db.commit()
         return new_book
 
-    return book_service.create_book(book_data)
+    result = book_service.create_book(book_data)
+    log_action(db, current_user.id, "CREATE_BOOK", "books", result.id,
+               f"Libro creado: '{result.nombre}' ISBN:{result.isbn}")
+    db.commit()
+    return result
 
 
 @router.put("/{book_id}", response_model=BookResponse)
@@ -339,7 +349,11 @@ def update_book(
     db: Session = Depends(get_db)
 ):
     """Actualiza un libro existente (empleados y admin)."""
-    return BookService(db).update_book(book_id, book_data)
+    result = BookService(db).update_book(book_id, book_data)
+    log_action(db, current_user.id, "UPDATE_BOOK", "books", book_id,
+               f"Libro actualizado: '{result.nombre}' (ID:{book_id})")
+    db.commit()
+    return result
 
 
 @router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -350,6 +364,9 @@ def delete_book(
 ):
     """Elimina (desactiva) un libro (solo admin)."""
     BookService(db).delete_book(book_id)
+    log_action(db, current_user.id, "DELETE_BOOK", "books", book_id,
+               f"Libro desactivado ID:{book_id}")
+    db.commit()
     return None
 
 

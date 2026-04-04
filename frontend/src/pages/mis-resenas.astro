@@ -356,22 +356,23 @@ window.saveEdit = async () => {
     );
     render();
     closeModal();
-    alert('Reseña actualizada correctamente');
+    Modal.success('Reseña actualizada', 'Tu reseña ha sido guardada correctamente.');
   } catch(e) {
-    alert('Error: ' + e.message, 'error');
+    Modal.error('Error', e.message || 'No se pudo actualizar la reseña');
   } finally {
     btn.disabled = false; btn.textContent = 'Guardar cambios';
   }
 };
 
 window.confirmDelete = async (id) => {
-  if (!confirm('¿Eliminar esta reseña? No se puede deshacer.')) return;
-  try {
-    await deleteReview(id);
-    reviews = reviews.filter(r => r.id !== id);
-    render();
-    alert('Reseña eliminada');
-  } catch(e) { alert('Error: ' + e.message, 'error'); }
+  Modal.confirm('Eliminar reseña', '¿Estás seguro? Esta acción no se puede deshacer.', async () => {
+    try {
+      await deleteReview(id);
+      reviews = reviews.filter(r => r.id !== id);
+      render();
+      Modal.success('Reseña eliminada', 'Tu reseña ha sido eliminada.');
+    } catch(e) { Modal.error('Error', e.message || 'No se pudo eliminar la reseña'); }
+  });
 };
 
 async function init() {

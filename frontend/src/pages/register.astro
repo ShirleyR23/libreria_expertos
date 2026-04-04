@@ -127,8 +127,16 @@ import PublicLayout from '../layouts/PublicLayout.astro';
       err.textContent = 'Por favor completa los campos obligatorios (*)';
       err.style.display = 'block'; return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      err.textContent = 'El correo electrónico no es válido (debe contener @ y un dominio).';
+      err.style.display = 'block'; return;
+    }
+    if (nombre.length < 2) {
+      err.textContent = 'El nombre debe tener al menos 2 caracteres.';
+      err.style.display = 'block'; return;
+    }
     if (password.length < 6) {
-      err.textContent = 'La contraseña debe tener al menos 6 caracteres';
+      err.textContent = 'La contraseña debe tener al menos 6 caracteres.';
       err.style.display = 'block'; return;
     }
 
@@ -144,7 +152,18 @@ import PublicLayout from '../layouts/PublicLayout.astro';
         body: JSON.stringify({ nombre, email, password, telefono: telefono || null, ciudad: ciudad || null, direccion: direccion || null }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Error al registrarse');
+      if (!res.ok) {
+        let msg = 'Error al registrarse. Intenta de nuevo.';
+        if (data.detail) {
+          const raw = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+          if (/not a valid email/i.test(raw) || /must have an @/i.test(raw)) msg = 'El correo electrónico no es válido.';
+          else if (/already exists|already registered|duplicat/i.test(raw)) msg = 'Ya existe una cuenta con ese correo electrónico.';
+          else if (/field required/i.test(raw)) msg = 'Todos los campos obligatorios deben completarse.';
+          else if (/string_too_short|at least/i.test(raw)) msg = 'Uno de los campos ingresados es demasiado corto.';
+          else if (raw.length < 200) msg = raw;
+        }
+        throw new Error(msg);
+      }
       window.location.href = '/login?registered=1';
     } catch(e: any) {
       err.textContent = e.message;

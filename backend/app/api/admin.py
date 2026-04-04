@@ -11,6 +11,7 @@ from app.schemas.employee import EmployeeCreate, EmployeeResponse
 from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService
 from app.utils.dependencies import require_admin
+from app.models.audit_log import log_action
 
 router = APIRouter(prefix="/admin", tags=["Administración"])
 
@@ -131,6 +132,9 @@ def update_employee(
     
     db.commit()
     db.refresh(user)
+    log_action(db, current_user.id, "UPDATE_EMPLOYEE", "users", employee_id,
+               f"Empleado actualizado: {user.nombre} (ID:{employee_id})")
+    db.commit()
     
     return {
         "id": user.id,

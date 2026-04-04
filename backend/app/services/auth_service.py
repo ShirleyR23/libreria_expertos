@@ -15,6 +15,7 @@ from app.schemas.client import ClientRegister
 from app.schemas.employee import EmployeeCreate
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.core.constants import UserRole
+from app.models.audit_log import log_action
 
 
 class AuthService:
@@ -56,7 +57,15 @@ class AuthService:
             },
             expires_delta=access_token_expires
         )
-        
+
+        # Registrar en auditoría
+        try:
+            log_action(self.db, user.id, "LOGIN", "users", user.id,
+                       f"Inicio de sesión: {user.email} ({user.role_name})")
+            self.db.commit()
+        except Exception:
+            pass
+
         return Token(
             access_token=access_token,
             token_type="bearer",
@@ -101,9 +110,11 @@ class AuthService:
             codigo_postal=register_data.codigo_postal
         )
         self.db.add(new_client)
+        log_action(self.db, new_user.id, "REGISTER_CLIENT", "users", new_user.id,
+                   f"Nuevo cliente registrado: {new_user.nombre} ({new_user.email})")
         self.db.commit()
         self.db.refresh(new_user)
-        
+
         # Generar token
         access_token_expires = timedelta(minutes=60)
         access_token = create_access_token(
@@ -168,6 +179,8 @@ class AuthService:
             direccion=employee_data.direccion
         )
         self.db.add(new_employee)
+        log_action(self.db, admin_user_id, "CREATE_EMPLOYEE", "users", new_user.id,
+                   f"Empleado creado: {new_user.nombre} ({new_user.email}) por admin ID {admin_user_id}")
         self.db.commit()
         self.db.refresh(new_user)
         

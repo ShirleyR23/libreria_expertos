@@ -12,6 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import get_settings
@@ -176,6 +177,106 @@ app.include_router(reports_router, prefix="/api/v1")   # ← NUEVO
 app.include_router(audit_router,   prefix="/api/v1")   # ← NUEVO
 app.include_router(isbn_router,    prefix="/api/v1")   # ← NUEVO
 app.include_router(charts_router,  prefix="/api/v1")   # ← NUEVO
+
+
+# ─── TRADUCCIÓN DE ERRORES DE VALIDACIÓN (Pydantic → Español) ─────────────
+_VALIDATION_MESSAGES_ES: dict[str, str] = {
+    # Email
+    "value_error.email": "El correo electrónico no es válido.",
+    "value is not a valid email address": "El correo electrónico no es válido.",
+    "an email address must have an @-sign": "El correo electrónico debe contener @.",
+    "an email address must have a domain part": "El correo electrónico debe tener un dominio (ej: usuario@dominio.com).",
+    "the email address is not valid": "La dirección de correo no es válida.",
+    # Campos requeridos
+    "field required": "Este campo es obligatorio.",
+    "none is not an allowed value": "Este campo no puede estar vacío.",
+    "value_error.missing": "Este campo es obligatorio.",
+    # Longitudes de cadena
+    "string_too_short": "El valor ingresado es demasiado corto.",
+    "string_too_long": "El valor ingresado es demasiado largo.",
+    "ensure this value has at least": "El valor es demasiado corto.",
+    "ensure this value has at most": "El valor es demasiado largo.",
+    # Tipos
+    "value is not a valid integer": "Debe ingresar un número entero válido.",
+    "value is not a valid float": "Debe ingresar un número válido.",
+    "value is not a valid boolean": "El valor debe ser verdadero o falso.",
+    "value is not a valid list": "Se esperaba una lista de valores.",
+    "value is not a valid dict": "Formato de datos no válido.",
+    # URL
+    "invalid or missing URL scheme": "La URL ingresada no es válida.",
+    "url_scheme": "La URL ingresada no es válida.",
+    # Números
+    "ensure this value is greater than": "El valor debe ser mayor.",
+    "ensure this value is less than": "El valor debe ser menor.",
+    "ensure this value is greater than or equal to": "El valor debe ser mayor o igual.",
+    "ensure this value is less than or equal to": "El valor debe ser menor o igual.",
+    "value is not a valid number": "Debe ingresar un número válido.",
+    # Genéricos
+    "literal_error": "Valor no permitido.",
+    "type_error": "Tipo de dato incorrecto.",
+}
+
+
+def _translate_validation_error(msg: str) -> str:
+    """Convierte mensajes de error de Pydantic al español."""
+    msg_lower = msg.lower()
+    for key, translated in _VALIDATION_MESSAGES_ES.items():
+        if key.lower() in msg_lower:
+            return translated
+    return "El valor ingresado no es válido."
+
+
+def _field_label(loc: tuple) -> str:
+    """Convierte la ubicación del campo en un nombre legible en español."""
+    _FIELD_NAMES_ES = {
+        "email": "correo electrónico",
+        "password": "contraseña",
+        "nombre": "nombre",
+        "telefono": "teléfono",
+        "direccion": "dirección",
+        "ciudad": "ciudad",
+        "codigo_postal": "código postal",
+        "role_id": "rol",
+        "activo": "estado",
+        "precio": "precio",
+        "stock": "stock",
+        "isbn": "ISBN",
+        "titulo": "título",
+        "autor": "autor",
+        "cantidad": "cantidad",
+        "new_password": "nueva contraseña",
+        "token": "token",
+    }
+    parts = [str(p) for p in loc if p != "body"]
+    if parts:
+        last = parts[-1]
+        return _FIELD_NAMES_ES.get(last, last.replace("_", " "))
+    return "campo"
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Retorna errores de validación de Pydantic en español."""
+    errors = exc.errors()
+    if not errors:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "Los datos enviados no son válidos."},
+        )
+
+    messages = []
+    for error in errors:
+        loc = error.get("loc", ())
+        raw_msg = error.get("msg", "")
+        field = _field_label(loc)
+        translated = _translate_validation_error(raw_msg)
+        messages.append(f"{field.capitalize()}: {translated}")
+
+    detail = " | ".join(messages) if len(messages) > 1 else messages[0]
+    return JSONResponse(
+        status_code=422,
+        content={"detail": detail},
+    )
 
 
 @app.get("/")

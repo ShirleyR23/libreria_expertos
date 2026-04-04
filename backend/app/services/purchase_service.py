@@ -111,6 +111,14 @@ class PurchaseService:
         
         return purchase
     
+    def get_by_supplier(self, supplier_id: int, limit: int = 5) -> List[Purchase]:
+        """Obtiene las compras más recientes de un proveedor."""
+        return self.db.query(Purchase).options(
+            joinedload(Purchase.items).joinedload(PurchaseItem.book)
+        ).filter(
+            Purchase.supplier_id == supplier_id
+        ).order_by(Purchase.fecha_compra.desc()).limit(limit).all()
+
     def get_all_purchases(
         self,
         skip: int = 0,

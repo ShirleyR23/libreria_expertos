@@ -300,7 +300,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
         `Compraste ${cart.length} libro${cart.length > 1 ? 's' : ''} por un total de L ${(total * 1.15).toFixed(2)}. Ya están disponibles en tu biblioteca.`;
       document.getElementById('successModal').style.display = 'flex';
     } catch(e) {
-      alert('Error: ' + e.message);
+      Modal.error('Error al procesar compra', e.message || 'No se pudo completar la compra. Intenta de nuevo.');
     } finally {
       btn.disabled = false;
       txt.style.display = 'inline';
@@ -309,7 +309,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   });
 
   document.getElementById('clearCartBtn')?.addEventListener('click', () => {
-    if (confirm('¿Vaciar el carrito?')) clearCart();
+    Modal.confirm('Vaciar carrito', '¿Estás seguro de que deseas eliminar todos los libros del carrito?', clearCart);
   });
 
   document.getElementById('logoutBtn')?.addEventListener('click', () => {
@@ -613,5 +613,27 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     .dark-toggle { display: none !important; }
     .top-bar { padding: 0 0.75rem !important; }
   }
+
+  /* ── CART-SPECIFIC DARK MODE ────────────────────────────────────────────── */
+  html.dark .cart-title   { color:#f1f5f9; }
+  html.dark .cart-empty   { background:rgba(255,255,255,.04); border-color:rgba(255,255,255,.1); }
+  html.dark .cart-empty h3 { color:#f1f5f9; }
+  html.dark .cart-empty p  { color:#64748b; }
+  html.dark .cart-item    { background:rgba(255,255,255,.05) !important; border-color:rgba(255,255,255,.08) !important; }
+  html.dark .cart-item-name { color:#f1f5f9; }
+  html.dark .cart-item-author { color:#64748b; }
+  html.dark .cart-item-price  { color:#60a5fa; }
+  html.dark .cart-item-subtotal { color:#e2e8f0; }
+  html.dark .cart-item-remove:hover { background:rgba(220,38,38,.2); }
+  html.dark .qty-control  { background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.12); }
+  html.dark .qty-btn      { color:#94a3b8; }
+  html.dark .qty-btn:hover:not(:disabled) { background:rgba(255,255,255,.1); }
+  html.dark .qty-val      { color:#e2e8f0; }
+  html.dark .summary-title      { color:#f1f5f9; }
+  html.dark .summary-item-row   { color:#64748b; }
+  html.dark .summary-divider    { background:rgba(255,255,255,.08); }
+  html.dark .summary-total-row  { color:#94a3b8; }
+  html.dark .summary-total-row.grand { color:#f1f5f9; border-color:rgba(255,255,255,.12); }
+  html.dark .cart-item-cover    { background:rgba(255,255,255,.06); }
 
 </style>

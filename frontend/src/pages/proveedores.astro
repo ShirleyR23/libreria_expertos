@@ -344,7 +344,7 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'
       const r = await fetch(`${BACKEND}/suppliers/${id}`, { headers: headers() });
       if (!r.ok) throw new Error();
       currentSupplier = await r.json();
-    } catch(e) { alert('Error al cargar proveedor'); return; }
+    } catch(e) { Modal.error('Error', 'No se pudo cargar el proveedor'); return; }
 
     document.getElementById('detailName').textContent = currentSupplier.nombre;
     document.getElementById('detailMeta').textContent =
@@ -362,7 +362,7 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'
     // Re-populate select every time in case books loaded late
     populateBookSelect();
     renderCatalog();
-    renderHistory();
+    await renderHistory();
     activateTab('catalog');
     document.getElementById('detailModal').style.display = 'flex';
   }
@@ -392,10 +392,47 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'
       </table>`;
   }
 
-  function renderHistory() {
-    document.getElementById('historyList').innerHTML =
-      `<p class="empty-catalog">El historial completo se registra en el módulo de Compras.</p>
-       <a href="/compras" class="btn btn-secondary btn-sm" style="margin-top:.75rem;display:inline-flex">Ver compras →</a>`;
+  async function renderHistory() {
+    const list = document.getElementById('historyList');
+    list.innerHTML = '<p class="empty-catalog" style="padding:1.5rem 0">Cargando historial…</p>';
+    try {
+      const r = await fetch(`${BACKEND}/purchases/by-supplier/${currentSupplier.id}?limit=5`, { headers: headers() });
+      if (!r.ok) throw new Error();
+      const purchases = await r.json();
+      if (!purchases.length) {
+        list.innerHTML = `
+          <p class="empty-catalog">No hay compras registradas para este proveedor.</p>
+          <a href="/compras" class="btn btn-secondary btn-sm" style="margin-top:.75rem;display:inline-flex">Ver todas las compras →</a>`;
+        return;
+      }
+      list.innerHTML = `
+        <div class="history-header">
+          <span class="history-hint">Últimas ${purchases.length} compras</span>
+          <a href="/compras" class="btn btn-secondary btn-sm">Ver historial completo →</a>
+        </div>
+        ${purchases.map(p => {
+          const fecha = new Date(p.fecha_compra).toLocaleDateString('es-HN', { day:'2-digit', month:'short', year:'numeric' });
+          const estadoClass = p.estado === 'RECIBIDA' ? 'hist-badge-ok' : p.estado === 'CANCELADA' ? 'hist-badge-cancel' : 'hist-badge-pend';
+          const itemsList = (p.items || []).map(i => `<span class="hist-item-chip">${i.libro_nombre || 'Libro'} ×${i.cantidad}</span>`).join('');
+          return `
+          <div class="history-entry">
+            <div class="hist-top">
+              <div class="hist-left">
+                <span class="hist-id">#${p.id}</span>
+                <span class="hist-date">${fecha}</span>
+                <span class="hist-badge ${estadoClass}">${p.estado}</span>
+              </div>
+              <div class="hist-total">L ${parseFloat(p.total).toFixed(2)}</div>
+            </div>
+            ${itemsList ? `<div class="hist-items">${itemsList}</div>` : ''}
+            ${p.notas ? `<p class="hist-notas">"${p.notas}"</p>` : ''}
+          </div>`;
+        }).join('')}`;
+    } catch(e) {
+      list.innerHTML = `
+        <p class="empty-catalog">No se pudo cargar el historial.</p>
+        <a href="/compras" class="btn btn-secondary btn-sm" style="margin-top:.75rem;display:inline-flex">Ver compras →</a>`;
+    }
   }
 
   // ── CATALOG ACTIONS ───────────────────────────────────────────────────────
@@ -433,7 +470,7 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'
       if (!r.ok) throw new Error();
       currentSupplier = await r.json();
       renderCatalog();
-    } catch(e) { alert('Error al eliminar del catálogo'); }
+    } catch(e) { Modal.error('Error', 'No se pudo eliminar el libro del catálogo'); }
   };
 
   function showMsg(el, text, type) {
@@ -469,8 +506,8 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'
           <div class="order-item-qty">
             <label class="form-label" style="font-size:.7rem">Cantidad</label>
             <input type="number" class="form-input qty-order-input" min="0" value="0"
-              data-libro-id="${item.libro_id}" data-costo="${item.costo_unitario}"
-              oninput="recalcOrderTotal()" style="width:80px;text-align:center">
+              data-libro-id="${item.libro_id}" data-costo="${parseFloat(item.costo_unitario)}"
+              oninput="window.recalcOrderTotal()" style="width:80px;text-align:center">
           </div>
         </div>`).join('');
     }
@@ -478,7 +515,7 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'
     document.getElementById('orderModal').style.display = 'flex';
   }
 
-  function recalcOrderTotal() {
+  window.recalcOrderTotal = function recalcOrderTotal() {
     let total = 0;
     document.querySelectorAll('.qty-order-input').forEach(inp => {
       total += (parseInt(inp.value) || 0) * (parseFloat(inp.dataset.costo) || 0);
@@ -492,7 +529,7 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'
       const qty = parseInt(inp.value) || 0;
       if (qty > 0) items.push({ libro_id: parseInt(inp.dataset.libroId), cantidad: qty, costo_unitario: parseFloat(inp.dataset.costo) });
     });
-    if (!items.length) { alert('Agrega al menos un libro con cantidad > 0.'); return; }
+    if (!items.length) { Modal.error('Pedido vacío', 'Agrega al menos un libro con cantidad mayor a 0.'); return; }
 
     const btn = document.getElementById('confirmOrderBtn');
     btn.disabled = true;
@@ -507,9 +544,9 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'
       if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Error'); }
       closeModal('orderModal');
       closeModal('detailModal');
-      alert('✅ Pedido realizado. El stock ha sido actualizado.');
+      Modal.success('¡Pedido realizado!', 'El stock de los libros ha sido actualizado correctamente.');
       loadSuppliers();
-    } catch(e) { alert('Error: ' + e.message); }
+    } catch(e) { Modal.error('Error al realizar pedido', e.message || 'Ocurrió un error inesperado'); }
     finally {
       btn.disabled = false;
       document.getElementById('orderBtnText').style.display    = 'inline';
@@ -530,7 +567,7 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'
 
   window.saveSupplier = async function() {
     const nombre = document.getElementById('supNombre').value.trim();
-    if (!nombre) { alert('El nombre es requerido.'); return; }
+    if (!nombre) { Modal.error('Campo requerido', 'El nombre del proveedor es requerido.'); return; }
     const btn = document.getElementById('saveSupplierBtn');
     btn.disabled = true;
     document.getElementById('saveBtnText').style.display   = 'none';
@@ -550,12 +587,10 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'
       if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Error'); }
       closeModal('supplierModal');
       await loadSuppliers();
-    } catch(e) { alert('Error: ' + e.message); }
-    finally {
-      btn.disabled = false;
-      document.getElementById('saveBtnText').style.display    = 'inline';
-      document.getElementById('saveBtnSpinner').style.display = 'none';
-    }
+    } catch(e) { Modal.error('Error al guardar', e.message || 'No se pudo guardar el proveedor'); }
+    document.getElementById('saveBtnText').style.display    = 'inline';
+    document.getElementById('saveBtnSpinner').style.display = 'none';
+    document.getElementById('saveSupplierBtn').disabled = false;
   };
 
   window.updateSupplier = async function() {
@@ -576,17 +611,22 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'
       currentSupplier = await r.json();
       document.getElementById('detailName').textContent = currentSupplier.nombre;
       await loadSuppliers();
-      alert('✅ Proveedor actualizado.');
-    } catch(e) { alert('Error: ' + e.message); }
+      Modal.success('Proveedor actualizado', 'Los datos del proveedor han sido guardados.');
+    } catch(e) { Modal.error('Error al actualizar', e.message || 'No se pudo actualizar el proveedor'); }
   };
 
   window.deleteSupplier = async function() {
-    if (!confirm(`¿Desactivar a ${currentSupplier?.nombre}?`)) return;
-    try {
-      await fetch(`${BACKEND}/suppliers/${currentSupplier.id}`, { method: 'DELETE', headers: headers() });
-      closeModal('detailModal');
-      await loadSuppliers();
-    } catch(e) { alert('Error al desactivar'); }
+    Modal.confirm(
+      `Desactivar proveedor`,
+      `¿Estás seguro de que deseas desactivar a <strong>${currentSupplier?.nombre}</strong>?`,
+      async () => {
+        try {
+          await fetch(`${BACKEND}/suppliers/${currentSupplier.id}`, { method: 'DELETE', headers: headers() });
+          closeModal('detailModal');
+          await loadSuppliers();
+        } catch(e) { Modal.error('Error', 'No se pudo desactivar el proveedor'); }
+      }
+    );
   };
 
   // ── TABS ──────────────────────────────────────────────────────────────────
@@ -758,6 +798,32 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'
   .btn-icon-del { background:none; border:none; cursor:pointer; font-size:1rem; opacity:.4; padding:4px; border-radius:6px; }
   .btn-icon-del:hover { opacity:1; background:#fef2f2; }
   .empty-catalog { color:var(--gray-400); font-size:.875rem; padding:2rem 0; text-align:center; }
+
+  /* ── HISTORY ─────────────────────────────────────────────────────────── */
+  .history-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; }
+  .history-hint { font-size:.78rem; color:var(--gray-400); font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+  .history-list { display:flex; flex-direction:column; gap:.75rem; }
+  .history-entry { background:var(--gray-50); border:1px solid var(--gray-100); border-radius:10px; padding:.875rem 1rem; }
+  .hist-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:.4rem; }
+  .hist-left { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  .hist-id { font-size:.75rem; font-weight:700; color:var(--gray-400); font-family:monospace; }
+  .hist-date { font-size:.78rem; color:var(--gray-500); }
+  .hist-badge { font-size:.65rem; font-weight:700; padding:2px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:.04em; }
+  .hist-badge-ok     { background:#dcfce7; color:#16a34a; }
+  .hist-badge-cancel { background:#fee2e2; color:#dc2626; }
+  .hist-badge-pend   { background:#fef3c7; color:#b45309; }
+  .hist-total { font-weight:700; font-size:.95rem; color:var(--navy); }
+  .hist-items { display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.35rem; }
+  .hist-item-chip { background:white; border:1px solid var(--gray-200); border-radius:6px; padding:2px 8px; font-size:.72rem; color:var(--gray-600); }
+  .hist-notas { font-size:.75rem; color:var(--gray-400); font-style:italic; margin-top:.35rem; }
+
+  /* dark mode history */
+  html.dark .history-entry   { background:rgba(255,255,255,.04); border-color:rgba(255,255,255,.07); }
+  html.dark .hist-total      { color:#e2e8f0; }
+  html.dark .hist-item-chip  { background:rgba(255,255,255,.07); border-color:rgba(255,255,255,.1); color:#94a3b8; }
+  html.dark .hist-badge-ok   { background:rgba(22,163,74,.15); color:#4ade80; }
+  html.dark .hist-badge-cancel { background:rgba(220,38,38,.15); color:#f87171; }
+  html.dark .hist-badge-pend { background:rgba(180,120,0,.15); color:#fbbf24; }
 
   /* ── ORDER ───────────────────────────────────────────────────────────── */
   .order-items { display:flex; flex-direction:column; gap:.75rem; max-height:360px; overflow-y:auto; }

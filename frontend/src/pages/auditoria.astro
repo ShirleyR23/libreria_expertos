@@ -5,308 +5,418 @@ let user = null;
 try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
 if (!user || user.role_name !== 'ADMIN') return Astro.redirect('/login');
 ---
-<DashboardLayout title="Logs de Auditoría" userRole="ADMIN">
+<DashboardLayout title="Auditoría del Sistema" userRole="ADMIN">
 <style>
-  .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.75rem;flex-wrap:wrap;gap:1rem}
-  .page-title{font-family:var(--font-display);font-size:1.75rem;color:var(--navy)}
-  .filters{display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem}
-  .fi{padding:.5rem .875rem;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:.875rem;font-family:var(--font-body);color:var(--gray-800);background:var(--bg-card)}
-  .fi:focus{outline:none;border-color:var(--blue-mid)}
-  .log-wrap{overflow-x:auto}
-  table{width:100%;border-collapse:collapse;background:var(--bg-card);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);font-size:.855rem}
-  thead th{background:var(--navy);color:white;padding:.7rem 1rem;text-align:left;font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
-  tbody td{padding:.65rem 1rem;border-bottom:1px solid var(--gray-100);vertical-align:top}
-  tbody tr:hover td{background:var(--gray-50)}
-  .badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:.7rem;font-weight:700;text-transform:uppercase;white-space:nowrap}
-  .b-create{background:#dcfce7;color:#166534}
-  .b-update{background:#dbeafe;color:#1e40af}
-  .b-delete{background:#fee2e2;color:#991b1b}
-  .b-login{background:#f3f4f6;color:#374151}
-  .b-discount{background:#fef9c3;color:#854d0e}
-  .b-other{background:#e0e7ff;color:#3730a3}
-  .det{font-family:monospace;font-size:.75rem;color:var(--gray-500);max-width:220px;word-break:break-all}
-  .load-more{text-align:center;padding:1.5rem 0}
-  .total-badge{background:var(--blue-ghost);color:var(--blue-dark);padding:.3rem .875rem;border-radius:99px;font-size:.82rem;font-weight:600}
+  /* ── Layout general ── */
+  .audit-page { display: flex; flex-direction: column; gap: 1.5rem; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+  .page-title { font-family: var(--font-display); font-size: 1.75rem; color: var(--navy); display: flex; align-items: center; gap: .6rem; }
 
-  /* ══ PAGE-LEVEL DARK MODE + LIQUID GLASS + RESPONSIVE ══════════════════ */
+  /* ── Stat cards ── */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+  .stat-card { background: var(--bg-card); border: 1.5px solid var(--gray-100); border-radius: var(--radius); padding: 1.1rem 1.25rem; display: flex; flex-direction: column; gap: .35rem; box-shadow: var(--shadow-sm); }
+  .stat-label { font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--gray-400); }
+  .stat-value { font-family: var(--font-display); font-size: 1.85rem; font-weight: 700; color: var(--navy); line-height: 1; }
+  .stat-sub { font-size: .78rem; color: var(--gray-400); }
+  .stat-card.s-blue  { border-top: 3px solid #3b82f6; }
+  .stat-card.s-green { border-top: 3px solid #22c55e; }
+  .stat-card.s-amber { border-top: 3px solid #f59e0b; }
+  .stat-card.s-red   { border-top: 3px solid #ef4444; }
 
-  /* -- Liquid Glass base (claro y oscuro) -- */
-  .glass-card {
-    background: rgba(255,255,255,0.72);
-    backdrop-filter: blur(18px) saturate(180%);
-    -webkit-backdrop-filter: blur(18px) saturate(180%);
-    border: 1px solid rgba(255,255,255,0.55);
-    box-shadow: 0 4px 24px rgba(13,27,46,0.10), inset 0 1px 0 rgba(255,255,255,0.8);
-    border-radius: var(--radius);
+  /* ── Filtros ── */
+  .filters-card { background: var(--bg-card); border: 1.5px solid var(--gray-100); border-radius: var(--radius); padding: 1.1rem 1.25rem; box-shadow: var(--shadow-sm); }
+  .filters-title { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--gray-400); margin-bottom: .85rem; }
+  .filters-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: .65rem; align-items: end; }
+  .fi-group { display: flex; flex-direction: column; gap: .3rem; }
+  .fi-label { font-size: .75rem; font-weight: 600; color: var(--gray-500); }
+  .fi { padding: .5rem .875rem; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); font-size: .875rem; font-family: var(--font-body); color: var(--gray-800); background: white; width: 100%; }
+  .fi:focus { outline: none; border-color: var(--blue-mid); }
+  .btn-clear { padding: .5rem .875rem; background: var(--gray-100); border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); font-size: .825rem; font-weight: 600; color: var(--gray-600); cursor: pointer; white-space: nowrap; }
+  .btn-clear:hover { background: var(--gray-200); }
+
+  /* ── Tabla ── */
+  .table-card { background: var(--bg-card); border: 1.5px solid var(--gray-100); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden; }
+  .table-toolbar { display: flex; align-items: center; justify-content: space-between; padding: .875rem 1.25rem; border-bottom: 1px solid var(--gray-100); flex-wrap: wrap; gap: .5rem; }
+  .total-badge { background: var(--blue-ghost); color: var(--blue-dark); padding: .28rem .875rem; border-radius: 99px; font-size: .8rem; font-weight: 700; }
+  .log-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .845rem; }
+  thead th { background: var(--navy); color: white; padding: .65rem 1rem; text-align: left; font-size: .73rem; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+  tbody td { padding: .6rem 1rem; border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
+  tbody tr:hover td { background: var(--gray-50); }
+  tbody tr:last-child td { border-bottom: none; }
+  .empty-row td { text-align: center; padding: 3rem; color: var(--gray-400); font-size: .9rem; }
+
+  /* ── Badges de acción ── */
+  .badge { display: inline-flex; align-items: center; gap: .3rem; padding: 2px 9px; border-radius: 99px; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+  .b-login           { background: #f1f5f9; color: #475569; }
+  .b-register        { background: #dcfce7; color: #166534; }
+  .b-create_book     { background: #dbeafe; color: #1e40af; }
+  .b-update_book     { background: #e0e7ff; color: #3730a3; }
+  .b-delete_book     { background: #fee2e2; color: #991b1b; }
+  .b-create_sale     { background: #d1fae5; color: #065f46; }
+  .b-cancel_sale     { background: #fef3c7; color: #92400e; }
+  .b-create_purchase { background: #cffafe; color: #164e63; }
+  .b-cancel_purchase { background: #fce7f3; color: #9d174d; }
+  .b-create_employee { background: #f3e8ff; color: #6b21a8; }
+  .b-update_employee { background: #ede9fe; color: #5b21b6; }
+  .b-other           { background: #f9fafb; color: #6b7280; }
+
+  /* ── Detalle expandible ── */
+  .det-wrap { max-width: 240px; }
+  .det-text { font-size: .775rem; color: var(--gray-500); word-break: break-word; line-height: 1.4; }
+  .det-toggle { font-size: .7rem; color: var(--blue-mid); cursor: pointer; background: none; border: none; padding: 0; font-weight: 600; }
+
+  /* ── Usuario chip ── */
+  .user-chip { display: inline-flex; align-items: center; gap: .4rem; font-size: .825rem; font-weight: 600; color: var(--navy); }
+  .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--blue-pale); color: var(--blue-mid); font-size: .65rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; text-transform: uppercase; }
+
+  /* ── Load more ── */
+  .load-more { text-align: center; padding: 1.25rem 0; border-top: 1px solid var(--gray-100); }
+
+  /* ── Dark mode ── */
+  html.dark .stat-card, html.dark .filters-card, html.dark .table-card {
+    background: rgba(20,30,50,0.7); border-color: rgba(255,255,255,0.07);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.35);
   }
-  html.dark .glass-card {
-    background: rgba(30,41,59,0.55);
-    border-color: rgba(255,255,255,0.08);
-    box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
-  }
+  html.dark .stat-value { color: #e2e8f0; }
+  html.dark .fi { background: rgba(10,15,30,0.6); color: #e2e8f0; border-color: rgba(255,255,255,0.1); }
+  html.dark tbody td { border-color: rgba(255,255,255,0.05); color: #cbd5e1; }
+  html.dark tbody tr:hover td { background: rgba(37,99,235,0.08); }
+  html.dark .table-toolbar { border-color: rgba(255,255,255,0.06); }
+  html.dark thead th { background: rgba(10,15,30,0.8); color: #64748b; }
+  html.dark .user-chip { color: #e2e8f0; }
+  html.dark .user-avatar { background: rgba(37,99,235,0.2); }
+  html.dark .btn-clear { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); color: #94a3b8; }
+  html.dark .load-more { border-color: rgba(255,255,255,0.06); }
 
-  /* -- Stat cards glass -- */
-  html.dark .inv-stat-card,
-  html.dark .stat-card {
-    background: rgba(30,41,59,0.6) !important;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-color: rgba(255,255,255,0.07) !important;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05) !important;
-  }
-
-  /* -- Table card glass -- */
-  html.dark .inv-table-card,
-  html.dark .card {
-    background: rgba(20,30,50,0.7) !important;
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border-color: rgba(255,255,255,0.07) !important;
-  }
-  html.dark .inv-table-card { box-shadow: 0 4px 24px rgba(0,0,0,0.4) !important; }
-
-  /* -- Table internals -- */
-  html.dark .inv-table, html.dark table { background: transparent !important; }
-  html.dark .inv-table th, html.dark th {
-    background: rgba(10,15,30,0.6) !important;
-    color: #64748b !important;
-    border-color: rgba(255,255,255,0.06) !important;
-  }
-  html.dark .inv-table td, html.dark td {
-    border-color: rgba(255,255,255,0.05) !important;
-    color: #cbd5e1 !important;
-  }
-  html.dark .inv-table tbody tr:hover td,
-  html.dark tr:hover td { background: rgba(37,99,235,0.08) !important; }
-
-  /* -- Supplier cards glass -- */
-  html.dark .supplier-card {
-    background: rgba(20,30,50,0.65) !important;
-    backdrop-filter: blur(14px);
-    border-color: rgba(255,255,255,0.07) !important;
-    box-shadow: 0 2px 16px rgba(0,0,0,0.3) !important;
-  }
-  html.dark .supplier-card:hover {
-    background: rgba(30,50,80,0.8) !important;
-    border-color: rgba(99,179,237,0.25) !important;
-  }
-
-  /* -- Page modal glass -- */
-  html.dark .page-modal-overlay {
-    background: rgba(5,10,20,0.8) !important;
-    backdrop-filter: blur(8px) !important;
-  }
-  html.dark .page-modal-box {
-    background: rgba(15,23,42,0.92) !important;
-    backdrop-filter: blur(24px) saturate(160%) !important;
-    -webkit-backdrop-filter: blur(24px) saturate(160%) !important;
-    border: 1px solid rgba(255,255,255,0.09) !important;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06) !important;
-    color: #e2e8f0 !important;
-  }
-  html.dark .page-modal-box .sale-modal-header,
-  html.dark .page-modal-box .modal-close-btn { border-color: rgba(255,255,255,0.07) !important; }
-  html.dark .page-modal-box .sale-modal-title { color: #f1f5f9 !important; }
-  html.dark .page-modal-box .sale-modal-sub   { color: #64748b !important; }
-  html.dark .page-modal-box .modal-close-btn  { background: rgba(255,255,255,0.07) !important; color: #94a3b8 !important; }
-
-  /* -- Forms inside modals & pages -- */
-  html.dark .form-input,
-  html.dark .inv-search,
-  html.dark .adv-input,
-  html.dark .fi,
-  html.dark select,
-  html.dark input[type="text"],
-  html.dark input[type="email"],
-  html.dark input[type="number"],
-  html.dark input[type="password"],
-  html.dark input[type="tel"],
-  html.dark input[type="date"],
-  html.dark textarea {
-    background: rgba(10,15,30,0.6) !important;
-    color: #e2e8f0 !important;
-    border-color: rgba(255,255,255,0.1) !important;
-  }
-  html.dark input::placeholder,
-  html.dark textarea::placeholder { color: #475569 !important; }
-  html.dark input:focus,
-  html.dark textarea:focus,
-  html.dark select:focus {
-    border-color: var(--blue-mid) !important;
-    box-shadow: 0 0 0 3px rgba(37,99,235,0.2) !important;
-  }
-  html.dark select option { background: #0f172a !important; color: #e2e8f0 !important; }
-
-  /* -- Badges dark -- */
-  html.dark .badge-success { background: rgba(22,163,74,0.15) !important; color: #4ade80 !important; border: 1px solid rgba(74,222,128,0.2); }
-  html.dark .badge-warning { background: rgba(217,119,6,0.15) !important;  color: #fcd34d !important; border: 1px solid rgba(252,211,77,0.2); }
-  html.dark .badge-danger  { background: rgba(220,38,38,0.15) !important;  color: #f87171 !important; border: 1px solid rgba(248,113,113,0.2); }
-  html.dark .badge-info    { background: rgba(37,99,235,0.15) !important;  color: #93c5fd !important; border: 1px solid rgba(147,197,253,0.2); }
-
-  /* -- Sale/purchase ID chips -- */
-  html.dark .sale-id { background: rgba(255,255,255,0.06) !important; color: #94a3b8 !important; }
-
-  /* -- State boxes (empty states) -- */
-  html.dark .state-box {
-    background: rgba(20,30,50,0.6) !important;
-    border-color: rgba(255,255,255,0.08) !important;
-    color: #64748b !important;
-  }
-
-  /* -- Action buttons -- */
-  html.dark .action-btn.edit-btn { background: rgba(37,99,235,0.15) !important; }
-  html.dark .action-btn.edit-btn:hover { background: rgba(37,99,235,0.28) !important; }
-  html.dark .action-btn.del-btn  { background: rgba(220,38,38,0.12) !important; }
-  html.dark .action-btn.del-btn:hover  { background: rgba(220,38,38,0.25) !important; }
-
-  /* -- Search bars -- */
-  html.dark .inv-search { background: rgba(10,15,30,0.6) !important; }
-  html.dark .inv-search::placeholder { color: #475569 !important; }
-
-  /* -- Page toolbar bg -- */
-  html.dark .v-toolbar .btn-secondary,
-  html.dark .sort-select,
-  html.dark .adv-toggle-btn {
-    background: rgba(30,41,59,0.7) !important;
-    border-color: rgba(255,255,255,0.1) !important;
-    color: #94a3b8 !important;
-  }
-
-  /* ══ RESPONSIVE — todas las páginas del dashboard ════════════════════════ */
+  /* ── Responsive ── */
   @media (max-width: 1024px) {
-    .content-area { padding: 1.25rem !important; }
-    .grid-4 { grid-template-columns: repeat(2,1fr) !important; }
-    .grid-3 { grid-template-columns: repeat(2,1fr) !important; }
-    .quick-grid { grid-template-columns: repeat(4,1fr) !important; }
-    .inv-stats { grid-template-columns: repeat(2,1fr) !important; }
-    .form-grid-2 { grid-template-columns: 1fr 1fr !important; }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .filters-grid { grid-template-columns: 1fr 1fr; }
   }
   @media (max-width: 768px) {
-    .content-area { padding: 1rem !important; }
-    .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr !important; }
-    .quick-grid { grid-template-columns: repeat(3,1fr) !important; }
-    .inv-stats { grid-template-columns: repeat(2,1fr) !important; }
-    .v-toolbar { flex-direction: column !important; align-items: stretch !important; }
-    .inv-search-wrap { max-width: 100% !important; }
-    .form-grid-2 { grid-template-columns: 1fr !important; }
-    .chart-wrap { height: 200px !important; }
-    .page-modal-box { max-width: 100% !important; margin: 0 !important; border-radius: var(--radius) !important; }
-    .top-bar { padding: 0 1rem !important; }
-    .top-bar .page-title { font-size: 1rem !important; }
-    .user-chip-role { display: none !important; }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .filters-grid { grid-template-columns: 1fr; }
+    .page-header { flex-direction: column; align-items: flex-start; }
   }
   @media (max-width: 480px) {
-    .content-area { padding: 0.75rem !important; }
-    .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr !important; }
-    .quick-grid { grid-template-columns: repeat(2,1fr) !important; }
-    .inv-stats { grid-template-columns: 1fr 1fr !important; }
-    .inv-stat-card { padding: 0.875rem 1rem !important; }
-    .stat-value { font-size: 1.5rem !important; }
-    .stat-value.stat-sm { font-size: 1.1rem !important; }
-    .card { padding: 1rem !important; }
-    .inv-table td, .inv-table th { padding: 0.5rem 0.625rem !important; font-size: 0.8rem !important; }
-    .sale-id { font-size: 0.7rem !important; }
-    .btn { padding: 0.5rem 0.875rem !important; font-size: 0.8rem !important; }
-    .page-title { font-size: 0.95rem !important; }
-    .dark-toggle { display: none !important; }
-    .top-bar { padding: 0 0.75rem !important; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .stat-value { font-size: 1.4rem; }
   }
-
 </style>
 
-<div class="page-header">
-  <h1 class="page-title">🔍 Logs de Auditoría</h1>
-  <div style="display:flex;gap:.75rem;align-items:center">
-    <span class="total-badge" id="totalBadge">—</span>
-    <button class="btn btn-secondary btn-sm" onclick="reload()">🔄 Actualizar</button>
+<div class="audit-page">
+
+  <!-- HEADER -->
+  <div class="page-header">
+    <h1 class="page-title">🔍 Auditoría del Sistema</h1>
+    <div style="display:flex;gap:.65rem;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="exportCSV()">⬇ Exportar CSV</button>
+      <button class="btn btn-secondary btn-sm" onclick="reload()">🔄 Actualizar</button>
+    </div>
   </div>
-</div>
 
-<div class="filters">
-  <input type="text" class="fi" id="fAccion" placeholder="Filtrar por acción…" oninput="applyFilter()">
-  <input type="text" class="fi" id="fTabla"  placeholder="Filtrar por tabla…"  oninput="applyFilter()">
-</div>
+  <!-- STAT CARDS -->
+  <div class="stats-row">
+    <div class="stat-card s-blue">
+      <span class="stat-label">Total de registros</span>
+      <span class="stat-value" id="statTotal">—</span>
+      <span class="stat-sub">en el sistema</span>
+    </div>
+    <div class="stat-card s-green">
+      <span class="stat-label">Hoy</span>
+      <span class="stat-value" id="statHoy">—</span>
+      <span class="stat-sub">acciones registradas</span>
+    </div>
+    <div class="stat-card s-amber">
+      <span class="stat-label">Usuarios activos</span>
+      <span class="stat-value" id="statUsuarios">—</span>
+      <span class="stat-sub">con actividad reciente</span>
+    </div>
+    <div class="stat-card s-red">
+      <span class="stat-label">Eliminaciones</span>
+      <span class="stat-value" id="statDeletes">—</span>
+      <span class="stat-sub">registros borrados</span>
+    </div>
+  </div>
 
-<div class="log-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>#</th><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Tabla</th><th>Reg.</th><th>Detalle</th>
-      </tr>
-    </thead>
-    <tbody id="logBody"><tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-600)">Cargando…</td></tr></tbody>
-  </table>
-</div>
-<div class="load-more" id="loadMoreArea" style="display:none">
-  <button class="btn btn-secondary" onclick="loadMore()">Cargar más registros</button>
+  <!-- FILTROS -->
+  <div class="filters-card">
+    <div class="filters-title">🔎 Filtros</div>
+    <div class="filters-grid">
+      <div class="fi-group">
+        <label class="fi-label">Tipo de acción</label>
+        <select id="fAccion" class="fi" onchange="applyFilter()">
+          <option value="">Todas las acciones</option>
+          <option value="LOGIN">Login</option>
+          <option value="REGISTER">Registro</option>
+          <option value="CREATE_BOOK">Libro creado</option>
+          <option value="UPDATE_BOOK">Libro editado</option>
+          <option value="DELETE_BOOK">Libro eliminado</option>
+          <option value="CREATE_SALE">Venta creada</option>
+          <option value="CANCEL_SALE">Venta cancelada</option>
+          <option value="CREATE_PURCHASE">Compra creada</option>
+          <option value="CANCEL_PURCHASE">Compra cancelada</option>
+          <option value="CREATE_EMPLOYEE">Empleado creado</option>
+          <option value="UPDATE_EMPLOYEE">Empleado editado</option>
+        </select>
+      </div>
+      <div class="fi-group">
+        <label class="fi-label">Tabla / Módulo</label>
+        <select id="fTabla" class="fi" onchange="applyFilter()">
+          <option value="">Todas las tablas</option>
+          <option value="users">Usuarios</option>
+          <option value="books">Libros</option>
+          <option value="sales">Ventas</option>
+          <option value="purchases">Compras</option>
+        </select>
+      </div>
+      <div class="fi-group">
+        <label class="fi-label">Buscar usuario</label>
+        <input type="text" id="fUsuario" class="fi" placeholder="Nombre del usuario…" oninput="applyFilter()">
+      </div>
+      <div class="fi-group">
+        <label class="fi-label">Desde fecha</label>
+        <input type="date" id="fFecha" class="fi" onchange="applyFilter()">
+      </div>
+      <button class="btn-clear" onclick="clearFilters()">✕ Limpiar</button>
+    </div>
+  </div>
+
+  <!-- TABLA -->
+  <div class="table-card">
+    <div class="table-toolbar">
+      <span class="total-badge" id="totalBadge">Cargando…</span>
+      <span style="font-size:.78rem;color:var(--gray-400)" id="filteredInfo"></span>
+    </div>
+    <div class="log-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:50px">#</th>
+            <th>Fecha y hora</th>
+            <th>Usuario</th>
+            <th>Acción</th>
+            <th>Módulo</th>
+            <th>ID Reg.</th>
+            <th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody id="logBody">
+          <tr class="empty-row"><td colspan="7">Cargando registros…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="load-more" id="loadMoreArea" style="display:none">
+      <button class="btn btn-secondary btn-sm" onclick="loadMore()">Cargar más registros</button>
+    </div>
+  </div>
+
 </div>
 
 <script>
-import { getAuditLogs } from '../services/api.js';
+  const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const token = localStorage.getItem('token');
 
-let allLogs = [], skip = 0;
-const LIMIT = 50;
+  let allLogs: any[] = [];
+  let displayedLogs: any[] = [];
+  let skip = 0;
+  const LIMIT = 100;
 
-function badgeClass(accion) {
-  if (accion.startsWith('CREATE')) return 'b-create';
-  if (accion.startsWith('UPDATE')) return 'b-update';
-  if (accion.startsWith('DELETE')) return 'b-delete';
-  if (accion.includes('LOGIN'))    return 'b-login';
-  if (accion.includes('DISCOUNT')) return 'b-discount';
-  return 'b-other';
-}
-
-function fmtDate(s) {
-  if (!s) return '—';
-  return new Date(s).toLocaleString('es-HN', { dateStyle:'short', timeStyle:'short' });
-}
-
-function renderRows(logs) {
-  if (!logs.length) return '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-600)">Sin registros</td></tr>';
-  return logs.map(l => `
-    <tr>
-      <td style="color:var(--gray-400)">${l.id}</td>
-      <td style="white-space:nowrap">${fmtDate(l.created_at)}</td>
-      <td><strong>${l.user_nombre || '—'}</strong></td>
-      <td><span class="badge ${badgeClass(l.accion)}">${l.accion}</span></td>
-      <td>${l.tabla || '—'}</td>
-      <td>${l.registro_id || '—'}</td>
-      <td><div class="det">${l.detalle || '—'}</div></td>
-    </tr>`).join('');
-}
-
-function applyFilter() {
-  const fa = document.getElementById('fAccion').value.toLowerCase();
-  const ft = document.getElementById('fTabla').value.toLowerCase();
-  const filtered = allLogs.filter(l =>
-    (!fa || l.accion.toLowerCase().includes(fa)) &&
-    (!ft || (l.tabla||'').toLowerCase().includes(ft))
-  );
-  document.getElementById('logBody').innerHTML = renderRows(filtered);
-}
-
-async function reload() {
-  skip = 0; allLogs = [];
-  document.getElementById('logBody').innerHTML =
-    '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-600)">Cargando…</td></tr>';
-  await loadMore(true);
-}
-
-window.loadMore = async (first=false) => {
-  try {
-    const res = await getAuditLogs({ limit: LIMIT, skip });
-    allLogs = first ? res.logs : [...allLogs, ...res.logs];
-    skip += res.logs.length;
-    document.getElementById('totalBadge').textContent = `${res.total} registros`;
-    applyFilter();
-    document.getElementById('loadMoreArea').style.display = skip < res.total ? 'block' : 'none';
-  } catch(e) {
-    document.getElementById('logBody').innerHTML =
-      `<tr><td colspan="7" style="color:var(--danger);padding:1rem">${e.message}</td></tr>`;
+  // ── Badge CSS class por acción ──────────────────────────────────────────
+  function badgeClass(accion: string): string {
+    const a = accion.toLowerCase();
+    if (a === 'login') return 'b-login';
+    if (a.includes('register')) return 'b-register';
+    if (a === 'create_book') return 'b-create_book';
+    if (a === 'update_book') return 'b-update_book';
+    if (a === 'delete_book') return 'b-delete_book';
+    if (a.includes('create_sale')) return 'b-create_sale';
+    if (a.includes('cancel_sale')) return 'b-cancel_sale';
+    if (a.includes('create_purchase')) return 'b-create_purchase';
+    if (a.includes('cancel_purchase')) return 'b-cancel_purchase';
+    if (a === 'create_employee') return 'b-create_employee';
+    if (a === 'update_employee') return 'b-update_employee';
+    return 'b-other';
   }
-};
 
-window.reload = reload;
-reload();
+  function accionLabel(accion: string): string {
+    const map: Record<string, string> = {
+      LOGIN: 'Inicio sesión',
+      REGISTER_CLIENT: 'Registro cliente',
+      CREATE_BOOK: 'Libro creado',
+      UPDATE_BOOK: 'Libro editado',
+      DELETE_BOOK: 'Libro eliminado',
+      CREATE_SALE_ONLINE: 'Venta online',
+      CREATE_SALE_PRESENCIAL: 'Venta presencial',
+      CANCEL_SALE: 'Venta cancelada',
+      CREATE_PURCHASE: 'Compra creada',
+      CANCEL_PURCHASE: 'Compra cancelada',
+      CREATE_EMPLOYEE: 'Empleado creado',
+      UPDATE_EMPLOYEE: 'Empleado editado',
+    };
+    return map[accion] || accion;
+  }
+
+  function fmtDate(s: string): string {
+    if (!s) return '—';
+    const d = new Date(s);
+    return d.toLocaleString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function initials(nombre: string): string {
+    return (nombre || '?').split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase();
+  }
+
+  // ── Renderizar filas ────────────────────────────────────────────────────
+  function renderRows(logs: any[]): string {
+    if (!logs.length) {
+      return '<tr class="empty-row"><td colspan="7">No se encontraron registros con los filtros aplicados</td></tr>';
+    }
+    return logs.map((l, i) => {
+      const det = l.detalle || '—';
+      const short = det.length > 60 ? det.substring(0, 60) + '…' : det;
+      const hasMore = det.length > 60;
+      return `
+        <tr>
+          <td style="color:var(--gray-400);font-size:.75rem">${l.id}</td>
+          <td style="white-space:nowrap;font-size:.8rem">${fmtDate(l.created_at)}</td>
+          <td>
+            <div class="user-chip">
+              <div class="user-avatar">${initials(l.user_nombre || 'S')}</div>
+              <span>${l.user_nombre || 'Sistema'}</span>
+            </div>
+          </td>
+          <td><span class="badge ${badgeClass(l.accion)}">${accionLabel(l.accion)}</span></td>
+          <td style="font-size:.8rem;color:var(--gray-500)">${l.tabla || '—'}</td>
+          <td style="font-size:.8rem;color:var(--gray-400)">${l.registro_id ?? '—'}</td>
+          <td>
+            <div class="det-wrap">
+              <div class="det-text" id="det-${l.id}-short">${short}</div>
+              ${hasMore ? `
+                <div class="det-text" id="det-${l.id}-full" style="display:none">${det}</div>
+                <button class="det-toggle" onclick="toggleDet(${l.id})">Ver más</button>
+              ` : ''}
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
+  (window as any).toggleDet = (id: number) => {
+    const s = document.getElementById(`det-${id}-short`);
+    const f = document.getElementById(`det-${id}-full`);
+    const btn = s?.parentElement?.querySelector('.det-toggle') as HTMLButtonElement;
+    if (!s || !f) return;
+    const isHidden = f.style.display === 'none';
+    s.style.display = isHidden ? 'none' : 'block';
+    f.style.display = isHidden ? 'block' : 'none';
+    if (btn) btn.textContent = isHidden ? 'Ver menos' : 'Ver más';
+  };
+
+  // ── Actualizar estadísticas ─────────────────────────────────────────────
+  function updateStats(logs: any[]) {
+    const today = new Date().toDateString();
+    const hoy = logs.filter(l => l.created_at && new Date(l.created_at).toDateString() === today).length;
+    const usuarios = new Set(logs.map(l => l.user_nombre).filter(Boolean)).size;
+    const deletes = logs.filter(l => l.accion.includes('DELETE') || l.accion.includes('CANCEL')).length;
+
+    document.getElementById('statHoy')!.textContent = String(hoy);
+    document.getElementById('statUsuarios')!.textContent = String(usuarios);
+    document.getElementById('statDeletes')!.textContent = String(deletes);
+  }
+
+  // ── Aplicar filtros ─────────────────────────────────────────────────────
+  function applyFilter() {
+    const fa = (document.getElementById('fAccion') as HTMLSelectElement).value.toLowerCase();
+    const ft = (document.getElementById('fTabla') as HTMLSelectElement).value.toLowerCase();
+    const fu = (document.getElementById('fUsuario') as HTMLInputElement).value.toLowerCase();
+    const ff = (document.getElementById('fFecha') as HTMLInputElement).value;
+
+    displayedLogs = allLogs.filter(l => {
+      if (fa && !l.accion.toLowerCase().includes(fa)) return false;
+      if (ft && (l.tabla || '').toLowerCase() !== ft) return false;
+      if (fu && !(l.user_nombre || '').toLowerCase().includes(fu)) return false;
+      if (ff) {
+        const logDate = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10) : '';
+        if (logDate < ff) return false;
+      }
+      return true;
+    });
+
+    document.getElementById('logBody')!.innerHTML = renderRows(displayedLogs);
+    const hasFilters = fa || ft || fu || ff;
+    document.getElementById('filteredInfo')!.textContent =
+      hasFilters ? `Mostrando ${displayedLogs.length} de ${allLogs.length} registros` : '';
+  }
+
+  (window as any).clearFilters = () => {
+    (document.getElementById('fAccion') as HTMLSelectElement).value = '';
+    (document.getElementById('fTabla') as HTMLSelectElement).value = '';
+    (document.getElementById('fUsuario') as HTMLInputElement).value = '';
+    (document.getElementById('fFecha') as HTMLInputElement).value = '';
+    applyFilter();
+  };
+
+  // ── Exportar CSV ────────────────────────────────────────────────────────
+  (window as any).exportCSV = () => {
+    const source = displayedLogs.length ? displayedLogs : allLogs;
+    if (!source.length) { alert('No hay registros para exportar.'); return; }
+    const headers = ['ID', 'Fecha', 'Usuario', 'Acción', 'Módulo', 'ID Registro', 'Detalle'];
+    const rows = source.map(l => [
+      l.id,
+      fmtDate(l.created_at),
+      l.user_nombre || 'Sistema',
+      l.accion,
+      l.tabla || '',
+      l.registro_id ?? '',
+      (l.detalle || '').replace(/,/g, ';'),
+    ]);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `auditoria_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  };
+
+  // ── Carga de datos ──────────────────────────────────────────────────────
+  async function reload() {
+    skip = 0; allLogs = [];
+    document.getElementById('logBody')!.innerHTML =
+      '<tr class="empty-row"><td colspan="7">Cargando registros…</td></tr>';
+    document.getElementById('totalBadge')!.textContent = 'Cargando…';
+    await loadMore(true);
+  }
+
+  (window as any).loadMore = async (first = false) => {
+    try {
+      const q = new URLSearchParams({ limit: String(LIMIT), skip: String(skip) });
+      const res = await fetch(`${API_URL}/audit/logs?${q}`, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      if (!res.ok) throw new Error(res.status === 401 ? 'Sin autorización' : 'Error al cargar registros');
+      const data = await res.json();
+
+      allLogs = first ? data.logs : [...allLogs, ...data.logs];
+      skip += data.logs.length;
+
+      document.getElementById('statTotal')!.textContent = data.total.toLocaleString('es-HN');
+      document.getElementById('totalBadge')!.textContent = `${data.total.toLocaleString('es-HN')} registros totales`;
+
+      updateStats(allLogs);
+      applyFilter();
+
+      document.getElementById('loadMoreArea')!.style.display = skip < data.total ? 'block' : 'none';
+    } catch (e: any) {
+      document.getElementById('logBody')!.innerHTML =
+        `<tr class="empty-row"><td colspan="7" style="color:var(--danger)">⚠ ${e.message}</td></tr>`;
+      document.getElementById('totalBadge')!.textContent = 'Error al cargar';
+    }
+  };
+
+  (window as any).reload = reload;
+  reload();
 </script>
+
 </DashboardLayout>

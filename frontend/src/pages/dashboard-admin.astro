@@ -248,7 +248,7 @@ document.getElementById('exportSalesBtn').addEventListener('click', async () => 
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'ventas.csv'; a.click();
     URL.revokeObjectURL(url);
-  } catch(e) { alert('Error al exportar: ' + e.message); }
+  } catch(e) { Modal.error('Error al exportar', e.message || 'No se pudo generar el archivo de exportación'); }
   finally { btn.disabled = false; btn.textContent = '📥 Exportar ventas'; }
 });
 

@@ -150,10 +150,13 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     </div>
 
     <!-- INFINITE SCROLL SENTINEL + LOADER -->
-    <div id="scrollSentinel" style="height:1px;margin-top:2rem;"></div>
+    <div id="scrollSentinel" style="height:10px;margin-top:1rem;"></div>
     <div id="scrollLoader" class="scroll-loader" style="display:none">
       <div class="scroll-spinner"></div>
       <span>Cargando más libros…</span>
+    </div>
+    <div id="loadMoreWrap" style="display:none;justify-content:center;margin:1.5rem 0">
+      <button id="loadMoreBtn" class="btn btn-secondary" onclick="triggerLoadMore()">Ver más libros</button>
     </div>
   </main>
 
@@ -348,7 +351,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   let advOpen = false;
 
   // Infinite scroll state
-  const PAGE_SIZE = 24;
+  const PAGE_SIZE = 48;
   let visibleCount = PAGE_SIZE;
   let filteredBooks = [];
   let isLoadingMore = false;
@@ -505,6 +508,20 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     });
   }
 
+  function triggerLoadMore() {
+    if (isLoadingMore || visibleCount >= filteredBooks.length) return;
+    isLoadingMore = true;
+    const loader = document.getElementById('scrollLoader');
+    if (loader) loader.style.display = 'flex';
+    setTimeout(() => {
+      visibleCount = Math.min(visibleCount + PAGE_SIZE, filteredBooks.length);
+      appendMoreBooks();
+      if (loader) loader.style.display = 'none';
+      isLoadingMore = false;
+    }, 300);
+  }
+  window.triggerLoadMore = triggerLoadMore;
+
   function setupInfiniteScroll() {
     const sentinel = document.getElementById('scrollSentinel');
     const loader = document.getElementById('scrollLoader');
@@ -534,6 +551,8 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
       const card = div.firstElementChild;
       grid.appendChild(card);
     });
+    const loadMoreWrap2 = document.getElementById('loadMoreWrap');
+    if (loadMoreWrap2) loadMoreWrap2.style.display = visibleCount < filteredBooks.length ? 'flex' : 'none';
     if (isCliente) {
       grid.querySelectorAll('.btn-buy:not([data-bound])').forEach(btn => {
         btn.dataset.bound = '1';
@@ -595,6 +614,8 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     empty.style.display = 'none';
     grid.style.display = 'grid';
     const firstPage = filteredBooks.slice(0, visibleCount);
+    const loadMoreWrap = document.getElementById('loadMoreWrap');
+    if (loadMoreWrap) loadMoreWrap.style.display = visibleCount < filteredBooks.length ? 'flex' : 'none';
     grid.innerHTML = firstPage.map(b => bookCardHTML(b)).join('');
     const srStat = document.getElementById('searchResultStat');
     if (currentSearch || currentCategory || countActiveAdvFilters() > 0) {
@@ -622,14 +643,17 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     const outOfStock = book.stock === 0;
     const lowStock = book.stock > 0 && book.stock < 5;
     const hasImg = !!book.imagen_url;
-    const imgUrl = hasImg ? `${BACKEND_BASE}${book.imagen_url}` : '';
+    const imgUrl = hasImg
+      ? (book.imagen_url.startsWith('http') ? book.imagen_url : `${BACKEND_BASE}${book.imagen_url}`)
+      : '';
 
     // Cover: image OR colorful placeholder
     const shortTitle = book.nombre.length > 30 ? book.nombre.substring(0, 30) + '…' : book.nombre;
     const shortAuthor = (book.autor || '').length > 26 ? (book.autor || '').substring(0, 26) + '…' : (book.autor || '');
     const coverContent = hasImg
-      ? `<img src="${imgUrl}" alt="${book.nombre}" class="cover-img" loading="lazy" width="230" height="200"
-            onerror="this.style.display='none';this.nextElementSibling.style.removeProperty('display')">`
+      ? `<img src="${imgUrl}" alt="" class="cover-img-bg" aria-hidden="true" loading="lazy">` +
+        `<img src="${imgUrl}" alt="${book.nombre}" class="cover-img" loading="lazy" width="230" height="200"
+            onerror="this.style.display='none';this.previousElementSibling.style.display='none';this.nextElementSibling.style.removeProperty('display')">`
       : '';
     const placeholderDisplay = hasImg ? 'display:none;' : '';
 
@@ -788,7 +812,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   function openBuyModal(book) {
     buyBook = book;
     const thumbHtml = book.imagen_url
-      ? `<img src="${BACKEND_BASE}${book.imagen_url}" class="buy-thumb" alt="${book.nombre}" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
+      ? `<img src="${book.imagen_url.startsWith('http') ? book.imagen_url : BACKEND_BASE+book.imagen_url}" class="buy-thumb" alt="${book.nombre}" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
       : '';
     const thumbDefault = `<div class="buy-thumb-default" style="display:${book.imagen_url?'none':'flex'}">📖</div>`;
     document.getElementById('buyBookInfo').innerHTML = `
@@ -1283,9 +1307,10 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .book-card.oos { opacity:0.7; }
 
   /* COVER — altura fija para que todas las tarjetas sean uniformes */
-  .book-cover { position:relative; height:200px; overflow:hidden; flex-shrink:0; background:transparent; }
-  .cover-img { width:100%; height:100%; object-fit:contain; display:block; transition:transform 0.4s ease; }
-  .book-card:hover .cover-img { transform:scale(1.04); }
+  .book-cover { position:relative; height:200px; overflow:hidden; flex-shrink:0; }
+  .cover-img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; object-position:center; display:block; transition:transform 0.4s ease; z-index:1; }
+  .cover-img-bg { position:absolute; inset:-10px; width:calc(100% + 20px); height:calc(100% + 20px); object-fit:cover; object-position:center; display:block; filter:blur(14px) brightness(0.7) saturate(1.4); z-index:0; pointer-events:none; }
+  .book-card:hover .cover-img, .book-card:hover .cover-img-bg { transform:scale(1.04); }
 
   /* PLACEHOLDER COVER — icono animado con título y autor */
   .cover-placeholder { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.4rem; padding:1rem; overflow:hidden; transition:transform 0.4s ease; }

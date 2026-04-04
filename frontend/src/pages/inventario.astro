@@ -120,11 +120,32 @@ const isAdmin = user.role_name === 'ADMIN';
             </div>
             <div class="img-upload-info">
               <div class="img-upload-title">Portada del libro</div>
-              <div class="img-upload-desc">JPG, PNG o WebP · Máx. 5 MB</div>
-              <label for="bookImagen" class="btn btn-secondary btn-sm" style="cursor:pointer;display:inline-flex;margin-top:0.5rem">
-                📷 Subir imagen
-              </label>
-              <input type="file" id="bookImagen" accept="image/*" style="display:none">
+
+              <!-- Tabs: Subir / URL -->
+              <div class="img-source-tabs">
+                <button type="button" class="img-tab active" id="tabFile" onclick="switchImgTab('file')">📷 Subir archivo</button>
+                <button type="button" class="img-tab" id="tabUrl" onclick="switchImgTab('url')">🔗 Pegar link</button>
+              </div>
+
+              <!-- Panel: Subir archivo -->
+              <div id="imgPanelFile">
+                <div class="img-upload-desc">JPG, PNG o WebP · Máx. 5 MB</div>
+                <label for="bookImagen" class="btn btn-secondary btn-sm" style="cursor:pointer;display:inline-flex;margin-top:0.5rem">
+                  📷 Subir imagen
+                </label>
+                <input type="file" id="bookImagen" accept="image/*" style="display:none">
+              </div>
+
+              <!-- Panel: URL externa -->
+              <div id="imgPanelUrl" style="display:none">
+                <div class="img-upload-desc">Pega el enlace directo a la imagen de portada</div>
+                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;align-items:center">
+                  <input type="text" id="bookImagenUrlInput" class="form-input" placeholder="https://ejemplo.com/portada.jpg" style="flex:1;font-size:0.82rem;padding:0.45rem 0.7rem">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="applyImageUrl()">Aplicar</button>
+                </div>
+                <div id="imgUrlStatus" style="font-size:0.75rem;margin-top:0.35rem;color:var(--gray-400)"></div>
+              </div>
+
               <input type="hidden" id="bookImagenUrl">
             </div>
           </div>
@@ -292,11 +313,14 @@ const isAdmin = user.role_name === 'ADMIN';
       const cat = book.categoria?.name || '';
       const cfg = getCatConfig(cat);
       const stockClass = book.stock === 0 ? 'stock-out' : book.stock <= book.stock_minimo ? 'stock-low' : 'stock-ok';
-      const thumb = book.imagen_url
-        ? `<img src="http://localhost:8000${book.imagen_url}" class="inv-thumb" loading="lazy" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
+      const imgSrc = book.imagen_url
+        ? (book.imagen_url.startsWith('http') ? book.imagen_url : 'http://localhost:8000'+book.imagen_url)
+        : null;
+      const thumb = imgSrc
+        ? `<img src="${imgSrc}" class="inv-thumb" loading="lazy" width="44" height="60" style="width:44px;height:60px;object-fit:cover;display:block;border-radius:5px;flex-shrink:0" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
         : '';
-      const thumbDefault = `<div class="inv-thumb-default" style="background:${cfg.bg};color:${cfg.color};${book.imagen_url?'display:none':''}">
-        <span style="font-size:1.5rem">${cfg.icon}</span>
+      const thumbDefault = `<div class="inv-thumb-default" style="background:${cfg.bg};color:${cfg.color};${imgSrc?'display:none':''}">
+        <span style="font-size:1.1rem">${cfg.icon}</span>
       </div>`;
       const actionsHTML = isAdmin ? `
         <td>
@@ -366,6 +390,12 @@ const isAdmin = user.role_name === 'ADMIN';
     const pp = document.getElementById('bookPdfPages'); if (pp) pp.value = '3';
     document.getElementById('imgPreview').style.display = 'none';
     document.getElementById('imgDefault').style.display = 'flex';
+    // Reset image tabs
+    switchImgTab('file');
+    const urlInput = document.getElementById('bookImagenUrlInput');
+    if (urlInput) urlInput.value = '';
+    const urlStatus = document.getElementById('imgUrlStatus');
+    if (urlStatus) { urlStatus.textContent = ''; urlStatus.style.color = ''; }
     // Reset PDF section
     document.getElementById('pdfIcon').textContent = '📄';
     document.getElementById('pdfUploadDesc').textContent = 'PDF · Máx. 50 MB · Los clientes podrán leerlo en línea';
@@ -374,6 +404,42 @@ const isAdmin = user.role_name === 'ADMIN';
     document.getElementById('pdfStatusMsg').textContent = '';
     if (document.getElementById('bookPdf')) document.getElementById('bookPdf').value = '';
   }
+
+  // ---- IMAGE SOURCE TABS ----
+  function switchImgTab(tab) {
+    const isFile = tab === 'file';
+    document.getElementById('tabFile').classList.toggle('active', isFile);
+    document.getElementById('tabUrl').classList.toggle('active', !isFile);
+    document.getElementById('imgPanelFile').style.display = isFile ? '' : 'none';
+    document.getElementById('imgPanelUrl').style.display = isFile ? 'none' : '';
+    if (isFile) {
+      // clear url input status when switching back
+      document.getElementById('imgUrlStatus').textContent = '';
+    }
+  }
+  window.switchImgTab = switchImgTab;
+
+  function applyImageUrl() {
+    const url = document.getElementById('bookImagenUrlInput').value.trim();
+    const statusEl = document.getElementById('imgUrlStatus');
+    if (!url) { statusEl.textContent = '⚠️ Ingresa un URL válido.'; return; }
+    statusEl.textContent = '⏳ Verificando imagen…';
+    const testImg = new Image();
+    testImg.onload = () => {
+      document.getElementById('bookImagenUrl').value = url;
+      document.getElementById('imgPreview').src = url;
+      document.getElementById('imgPreview').style.display = 'block';
+      document.getElementById('imgDefault').style.display = 'none';
+      statusEl.textContent = '✅ Portada cargada correctamente.';
+      statusEl.style.color = 'var(--success)';
+    };
+    testImg.onerror = () => {
+      statusEl.textContent = '❌ No se pudo cargar la imagen. Verifica que el link sea directo a una imagen.';
+      statusEl.style.color = 'var(--danger)';
+    };
+    testImg.src = url;
+  }
+  window.applyImageUrl = applyImageUrl;
 
   // ---- IMAGE UPLOAD ----
   document.getElementById('bookImagen')?.addEventListener('change', async (e) => {
@@ -581,9 +647,18 @@ const isAdmin = user.role_name === 'ADMIN';
       document.getElementById('bookImagenUrl').value = book.imagen_url || '';
       document.getElementById('bookPdfPages').value = book.pdf_preview_pages || 3;
       if (book.imagen_url) {
-        document.getElementById('imgPreview').src = `http://localhost:8000${book.imagen_url}`;
+        // If URL is external (starts with http), show in URL tab
+        const isExternal = book.imagen_url.startsWith('http://') || book.imagen_url.startsWith('https://');
+        const previewSrc = isExternal ? book.imagen_url : `http://localhost:8000${book.imagen_url}`;
+        document.getElementById('imgPreview').src = previewSrc;
         document.getElementById('imgPreview').style.display = 'block';
         document.getElementById('imgDefault').style.display = 'none';
+        if (isExternal) {
+          switchImgTab('url');
+          document.getElementById('bookImagenUrlInput').value = book.imagen_url;
+          document.getElementById('imgUrlStatus').textContent = '✅ Portada cargada.';
+          document.getElementById('imgUrlStatus').style.color = 'var(--success)';
+        }
       } else {
         document.getElementById('imgPreview').style.display = 'none';
         document.getElementById('imgDefault').style.display = 'flex';
@@ -675,9 +750,11 @@ const isAdmin = user.role_name === 'ADMIN';
   .table-empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4rem 2rem; text-align:center; }
 
   /* THUMB */
-  .inv-thumb-wrap { width:52px; }
-  .inv-thumb { width:52px; height:72px; object-fit:cover; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.12); display:block; }
-  .inv-thumb-default { width:52px; height:72px; border-radius:6px; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:0.25rem; }
+  .inv-thumb-wrap { width:44px; height:60px; min-width:44px; max-width:44px; min-height:60px; max-height:60px; overflow:hidden; flex-shrink:0; border-radius:5px; box-shadow:0 1px 6px rgba(0,0,0,0.15); }
+  .inv-thumb { width:44px; height:60px; object-fit:cover; display:block; border-radius:5px; }
+  .inv-thumb-default { width:44px; height:60px; border-radius:5px; display:flex; align-items:center; justify-content:center; }
+  .inv-table td:first-child { width:56px; min-width:56px; max-width:56px; padding:0.4rem 0.6rem; vertical-align:middle; overflow:hidden; }
+  .inv-table tr { height:72px; max-height:72px; overflow:hidden; }
 
   /* BOOK META */
   .inv-book-name { font-weight:600; font-size:0.9rem; color:var(--navy); }
@@ -726,6 +803,12 @@ const isAdmin = user.role_name === 'ADMIN';
   .img-preview { width:80px; height:110px; object-fit:cover; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
   .img-upload-title { font-weight:600; font-size:0.9rem; color:var(--navy); margin-bottom:0.25rem; }
   .img-upload-desc { font-size:0.8rem; color:var(--gray-400); }
+  .img-source-tabs { display:flex; gap:0.4rem; margin:0.5rem 0 0.35rem; }
+  .img-tab { padding:0.3rem 0.75rem; border-radius:999px; border:1.5px solid var(--gray-200); background:transparent; font-size:0.75rem; font-weight:600; cursor:pointer; font-family:inherit; color:var(--gray-400); transition:all .15s; }
+  .img-tab.active { background:var(--blue-mid); border-color:var(--blue-mid); color:#fff; }
+  .img-tab:hover:not(.active) { border-color:var(--blue-mid); color:var(--blue-mid); }
+  html.dark .img-tab { color:#64748b; border-color:rgba(255,255,255,0.12); }
+  html.dark .img-tab.active { background:var(--blue-mid); color:#fff; border-color:var(--blue-mid); }
 
   /* FORM GRID */
   .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:0 1rem; }

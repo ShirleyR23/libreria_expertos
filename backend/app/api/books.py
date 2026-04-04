@@ -99,27 +99,41 @@ def get_pdf_preview(
     if not book or not book.pdf_url:
         raise HTTPException(status_code=404, detail="Este libro no tiene PDF disponible")
 
-    pdf_path = os.path.join(os.path.dirname(__file__), "..", "..", book.pdf_url.lstrip("/"))
-    if not os.path.exists(pdf_path):
-        raise HTTPException(status_code=404, detail="Archivo PDF no encontrado")
-
     preview_pages = int(book.pdf_preview_pages or 3)
 
     try:
         from pypdf import PdfReader, PdfWriter
-        reader = PdfReader(pdf_path)
+        import io as _io
+
+        # URLs externas (Archive.org, etc.) — descargar en memoria
+        if book.pdf_url.startswith("http"):
+            import urllib.request
+            req = urllib.request.Request(
+                book.pdf_url,
+                headers={"User-Agent": "Mozilla/5.0"}
+            )
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                pdf_bytes = resp.read()
+            reader = PdfReader(_io.BytesIO(pdf_bytes))
+        else:
+            # PDF local subido por el admin
+            pdf_path = os.path.join(os.path.dirname(__file__), "..", "..", book.pdf_url.lstrip("/"))
+            if not os.path.exists(pdf_path):
+                raise HTTPException(status_code=404, detail="Archivo PDF no encontrado")
+            reader = PdfReader(pdf_path)
+
         writer = PdfWriter()
         total = len(reader.pages)
         for i in range(min(preview_pages, total)):
             writer.add_page(reader.pages[i])
-        buf = io.BytesIO()
+        buf = _io.BytesIO()
         writer.write(buf)
         buf.seek(0)
         data = buf.read()
-    except ImportError:
-        # If pypdf not installed, serve full file (should not happen in prod)
-        with open(pdf_path, "rb") as f:
-            data = f.read()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"No se pudo cargar el PDF: {e}")
 
     return Response(
         content=data,

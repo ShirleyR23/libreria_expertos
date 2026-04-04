@@ -17,12 +17,14 @@ const disponible = stock > 0;
 const lowStock = stock > 0 && stock < 5;
 const precioFormateado = new Intl.NumberFormat('es-HN', { style: 'currency', currency: 'HNL' }).format(precio);
 const hasImg = !!imagenUrl;
+const isExternalUrl = imagenUrl?.startsWith('http://') || imagenUrl?.startsWith('https://');
+const coverSrc = hasImg ? (isExternalUrl ? imagenUrl : `http://localhost:8000${imagenUrl}`) : '';
 ---
 
 <article class={`book-card ${!disponible ? 'out-of-stock' : ''}`} data-book-id={id}>
   <div class="book-cover">
     {hasImg
-      ? <img src={`http://localhost:8000${imagenUrl}`} alt={nombre} class="cover-img" loading="lazy" />
+      ? <img src={coverSrc} alt={nombre} class="cover-img" loading="lazy" />
       : null}
     <div class="cover-default" style={hasImg ? 'display:none' : ''}>
       <div class="cover-default-inner">

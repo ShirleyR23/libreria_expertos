@@ -153,7 +153,7 @@ if (!user || (user.role_name !== 'ADMIN' && user.role_name !== 'EMPLEADO')) retu
       const stockClass = b.stock === 0 ? 'stock-out' : b.stock < 5 ? 'stock-low' : 'stock-ok';
       const stockLabel = b.stock === 0 ? '✖ Agotado' : b.stock < 5 ? `⚡ ${b.stock} disp.` : `✔ ${b.stock} disp.`;
       const cover = b.imagen_url
-        ? `<img src="${BACKEND}${b.imagen_url}" class="cat-cover-img" loading="lazy" onerror="this.style.display='none';this.nextSibling.style.removeProperty('display')">`
+        ? `<img src="${b.imagen_url.startsWith('http') ? b.imagen_url : BACKEND+b.imagen_url}" class="cat-cover-img" loading="lazy" onerror="this.style.display='none';this.nextSibling.style.removeProperty('display')">`
         : '';
       const placeholderStyle = b.imagen_url ? 'display:none' : '';
       const catTag = b.categoria?.name ? `<span class="cat-tag" style="background:${cfg.light}20;color:${cfg.color};border:1px solid ${cfg.light}">${cfg.icon} ${b.categoria.name}</span>` : '';
@@ -526,4 +526,4 @@ if (!user || (user.role_name !== 'ADMIN' && user.role_name !== 'EMPLEADO')) retu
     .top-bar { padding: 0 0.75rem !important; }
   }
 
-</style>
+</style> 

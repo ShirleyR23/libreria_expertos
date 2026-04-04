@@ -67,6 +67,13 @@ def init_db() -> None:
     # Insertar datos iniciales
     seed_initial_data()
 
+    # ── Seed de libros nuevos, portadas y rol GERENTE ──────────────────
+    try:
+        from app.database.seed_nuevos_datos import run_seed
+        run_seed(engine, SessionLocal, is_sqlite)
+    except Exception as e:
+        print(f"⚠️  seed_nuevos_datos no se pudo ejecutar: {e}")
+
 
 def _run_migrations() -> None:
     """

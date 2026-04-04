@@ -11,7 +11,7 @@ if (!user || user.role_name !== 'CLIENTE') return Astro.redirect('/login');
   <!-- HEADER HERO -->
   <div class="lb-hero">
     <div class="lb-hero-inner">
-      <span class="lb-hero-icon">📚</span>
+      <img src="/honduletras-logo-dark.svg" alt="HonduLetras" class="lb-hero-logo">
       <div>
         <div class="lb-hero-title">Mis Libros</div>
         <div class="lb-hero-sub">Tu biblioteca digital personal — lee cuando quieras</div>
@@ -559,7 +559,7 @@ loadMyBooks();
 /* ── HERO ── */
 .lb-hero { background:linear-gradient(135deg,#0d1b2e,#1e3a6e); border-radius:var(--radius); padding:1.5rem 2rem; margin-bottom:1.5rem; color:white; display:flex; justify-content:space-between; align-items:center; }
 .lb-hero-inner { display:flex; gap:1rem; align-items:center; }
-.lb-hero-icon { font-size:2.5rem; }
+.lb-hero-logo { height:44px; width:auto; display:block; }
 .lb-hero-title { font-family:var(--font-display); font-size:1.5rem; font-weight:700; margin-bottom:2px; }
 .lb-hero-sub { font-size:0.85rem; color:rgba(255,255,255,0.6); }
 

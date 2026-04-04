@@ -28,14 +28,14 @@ const saleId = Astro.url.searchParams.get('venta');
     <div class="invoice-wrap">
 
       <!-- WATERMARK BACKGROUND -->
-      <div class="invoice-watermark">📚</div>
+      <div class="invoice-watermark">HL</div>
 
       <!-- HEADER MEMBRETE -->
       <div class="inv-header">
         <div class="inv-brand-block">
-          <div class="inv-logo">📚</div>
+          <img src="/honduletras-logo-dark.svg" alt="HonduLetras" class="inv-logo-img">
           <div>
-            <div class="inv-company-name">Librería El Saber</div>
+            <div class="inv-company-name">HonduLetras</div>
             <div class="inv-company-sub">Tu mundo de libros, en un solo lugar</div>
             <div class="inv-company-detail">Tegucigalpa, Honduras · Tel: (504) 2222-3333</div>
             <div class="inv-company-detail">correo@libreriasaber.hn · www.libreriasaber.hn</div>
@@ -108,13 +108,13 @@ const saleId = Astro.url.searchParams.get('venta');
         <div class="inv-footer-right">
           <div class="inv-firma-line"></div>
           <div class="inv-firma-lbl">Firma Autorizada</div>
-          <div class="inv-firma-name">Librería El Saber</div>
+          <div class="inv-firma-name">HonduLetras</div>
         </div>
       </div>
 
       <!-- BOTTOM STRIP -->
       <div class="inv-bottom-strip">
-        <span>📚 Librería El Saber — Tu mundo de libros, en un solo lugar · Tegucigalpa, Honduras</span>
+        <span>HonduLetras — Librería HN · Tu mundo de libros, en un solo lugar · Tegucigalpa, Honduras</span>
       </div>
 
     </div>
@@ -222,11 +222,15 @@ const saleId = Astro.url.searchParams.get('venta');
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 18rem;
+    font-size: 14rem;
+    font-weight: 900;
+    font-family: 'Playfair Display', Georgia, serif;
+    letter-spacing: -0.05em;
     opacity: 0.03;
     pointer-events: none;
     z-index: 0;
     user-select: none;
+    color: #0d1b2e;
   }
 
   /* ── HEADER MEMBRETE ── */
@@ -241,7 +245,7 @@ const saleId = Astro.url.searchParams.get('venta');
     z-index: 1;
   }
   .inv-brand-block { display:flex; gap:1rem; align-items:flex-start; }
-  .inv-logo { font-size:3rem; line-height:1; }
+  .inv-logo-img { height: 52px; width: auto; display: block; margin-top: 2px; }
   .inv-company-name { font-size:1.4rem; font-weight:800; letter-spacing:-0.02em; margin-bottom:2px; }
   .inv-company-sub { font-size:0.8rem; color:rgba(255,255,255,0.65); margin-bottom:4px; font-style:italic; }
   .inv-company-detail { font-size:0.75rem; color:rgba(255,255,255,0.55); line-height:1.6; }

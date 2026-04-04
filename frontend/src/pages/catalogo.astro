@@ -16,8 +16,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   <nav class="top-nav">
     <div class="nav-inner">
       <a href="/catalogo" class="brand">
-        <div class="brand-icon">📚</div>
-        <span class="brand-name">Librería</span>
+        <img src="/honduletras-logo-dark.svg" alt="HonduLetras" class="brand-logo-img">
       </a>
       <div class="nav-actions">
         {isCliente ? (
@@ -1193,8 +1192,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .top-nav { position:sticky; top:0; z-index:200; background:rgba(13,27,46,0.96); backdrop-filter:blur(10px); border-bottom:1px solid rgba(255,255,255,0.08); }
   .nav-inner { max-width:1400px; margin:0 auto; padding:0 2rem; display:flex; align-items:center; justify-content:space-between; height:64px; }
   .brand { display:flex; align-items:center; gap:0.75rem; text-decoration:none; }
-  .brand-icon { font-size:1.6rem; }
-  .brand-name { font-family:var(--font-display); font-size:1.35rem; font-weight:700; color:white; }
+  .brand-logo-img { height:38px; width:auto; display:block; }
   .nav-actions { display:flex; align-items:center; gap:0.75rem; }
   .nav-greeting { color:rgba(255,255,255,0.7); font-size:0.875rem; }
   .btn-outline-nav { border:1.5px solid rgba(255,255,255,0.4); color:white; background:transparent; }

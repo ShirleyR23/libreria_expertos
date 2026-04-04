@@ -164,7 +164,7 @@ def get_pdf_full_auth(
         raise HTTPException(status_code=404, detail="PDF no disponible")
 
     # Admin/empleado pueden ver cualquier PDF
-    if not current_user.is_cliente:
+    if not current_user.is_cliente():
         pass  # allowed
     else:
         # Verificar que el cliente compró este libro

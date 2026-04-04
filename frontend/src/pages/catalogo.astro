@@ -42,6 +42,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
             <a href="/register" class="btn btn-sm btn-primary">Registrarse</a>
           </>
         )}
+        <button id="darkToggleCatalog" onclick="window.toggleDark()" class="dark-toggle-nav" title="Cambiar tema">🌙</button>
       </div>
     </div>
   </nav>
@@ -158,6 +159,54 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   </main>
 
   <!-- PDF PREVIEW MODAL -->
+  <!-- ═══ REVIEW MODAL ═══════════════════════════════════════════════════ -->
+  <!-- MODAL: Ver reseñas (solo lectura, abierto desde botón ⭐ Reseñas) -->
+  <div id="viewReviewsModal" style="display:none;position:fixed;inset:0;background:rgba(13,27,46,.65);backdrop-filter:blur(4px);z-index:9200;align-items:center;justify-content:center;padding:1rem">
+    <div class="vr-box">
+      <div class="vr-header">
+        <div>
+          <h2 class="vr-title" id="vrTitle">Reseñas</h2>
+          <p class="vr-sub" id="vrSub"></p>
+        </div>
+        <button class="vr-close" onclick="document.getElementById('viewReviewsModal').style.display='none'">✕</button>
+      </div>
+      <div class="vr-body" id="vrBody">
+        <div class="vr-loading">Cargando reseñas…</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="reviewModal" style="display:none;position:fixed;inset:0;background:rgba(13,27,46,.65);z-index:9100;align-items:center;justify-content:center;padding:1rem">
+    <div class="review-modal-inner" style="border-radius:var(--radius-lg);padding:2rem;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;animation:slideUp .25s ease">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <h2 style="font-family:var(--font-display);font-size:1.3rem;color:var(--navy)" id="reviewBookTitle">Reseña</h2>
+        <button id="closeReviewModal" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--gray-600)">✕</button>
+      </div>
+      <div id="reviewSummary"></div>
+      <div id="reviewAlert"></div>
+      <!-- Write review -->
+      <div style="background:var(--gray-50);border-radius:var(--radius-sm);padding:1rem;margin-bottom:1rem">
+        <p style="font-size:.82rem;font-weight:600;color:var(--gray-600);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.5rem">Tu calificación</p>
+        <div id="reviewStarsPicker" style="display:flex;gap:6px;font-size:1.8rem;cursor:pointer;margin-bottom:.75rem">
+          <span class="rv-star" data-v="1" style="color:#d1d5db">★</span>
+          <span class="rv-star" data-v="2" style="color:#d1d5db">★</span>
+          <span class="rv-star" data-v="3" style="color:#d1d5db">★</span>
+          <span class="rv-star" data-v="4" style="color:#d1d5db">★</span>
+          <span class="rv-star" data-v="5" style="color:#d1d5db">★</span>
+        </div>
+        <input type="hidden" id="reviewEditId">
+        <input type="text" id="reviewTitulo" placeholder="Título de la reseña (opcional)"
+          style="width:100%;padding:.6rem .875rem;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-family:var(--font-body);font-size:.9rem;margin-bottom:.6rem">
+        <textarea id="reviewComentario" placeholder="Escribe tu opinión sobre este libro…" rows="3"
+          style="width:100%;padding:.6rem .875rem;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-family:var(--font-body);font-size:.9rem;resize:vertical"></textarea>
+        <button id="reviewSubmitBtn" class="btn btn-primary" style="width:100%;margin-top:.75rem">✅ Publicar reseña</button>
+      </div>
+      <!-- Existing reviews -->
+      <p style="font-size:.82rem;font-weight:600;color:var(--gray-600);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.5rem">Reseñas de otros lectores</p>
+      <div id="reviewList"></div>
+    </div>
+  </div>
+
   <div id="pdfPreviewModal" class="pdf-prev-overlay" style="display:none">
     <div class="pdf-prev-box">
       <div class="pdf-prev-topbar">
@@ -349,6 +398,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
       } catch {}
     }
     await Promise.all([loadCategories(), loadBooks()]);
+    loadRatings();   // fire-and-forget, updates cards when ready
     setupSearch();
     setupAdvancedFilters();
     setupInfiniteScroll();
@@ -629,6 +679,24 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
       ? `<p class="book-editorial">${book.editorial}${book.anio_publicacion ? ' · ' + book.anio_publicacion : ''}</p>`
       : '';
 
+    // Star rating (from cached summaries)
+    const ratingData = window._ratings && window._ratings[book.id];
+    const starLine = ratingData && ratingData.total_resenas > 0
+      ? `<div class="book-stars" onclick="openReviewModal(${book.id},'${book.nombre.replace(/'/g,"\'")}')">
+           <span style="color:#f59e0b">${'★'.repeat(Math.round(ratingData.promedio))}${'☆'.repeat(5-Math.round(ratingData.promedio))}</span>
+           <span class="star-count">${ratingData.promedio.toFixed(1)} (${ratingData.total_resenas})</span>
+         </div>`
+      : `<div class="book-stars-empty" onclick="openReviewModal(${book.id},'${book.nombre.replace(/'/g,"\'")}')">
+           <span style="color:#d1d5db">☆☆☆☆☆</span>
+           <span class="star-count">Sin reseñas</span>
+         </div>`;
+    // Review button for clients who purchased
+    const reviewBtn = isCliente && yaComprado
+      ? `<button class="btn-review" onclick="openReviewModal(${book.id},'${book.nombre.replace(/'/g,"\'")}')">✍️ Reseña</button>`
+      : '';
+    // Button to view all reviews (visible to everyone)
+    const verResenasBtn = `<button class="btn-ver-resenas" data-book-id="${book.id}" data-book-name="${book.nombre.replace(/"/g,'&quot;')}" onclick="openViewReviewsModal(this.dataset.bookId, this.dataset.bookName)">⭐ Reseñas</button>`;
+
     return `
       <article class="book-card${outOfStock ? ' oos' : ''}${tieneDescuento ? ' has-discount' : ''}">
         <div class="book-cover" style="background:${cfg.light}">
@@ -646,6 +714,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
           <h3 class="book-name">${book.nombre}</h3>
           <p class="book-author">✍️ ${book.autor}</p>
           ${editLine}
+          ${starLine}
           <div class="book-bottom">
             <div>
               ${tieneDescuento
@@ -656,9 +725,11 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
             </div>
             <div style="display:flex;flex-direction:column;gap:0.35rem;align-items:flex-end">
               ${addCartBtn}${ownedBadge}
-              <div style="display:flex;gap:0.35rem;align-items:center">
+              <div style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap;justify-content:flex-end">
                 ${buyBtn}
                 ${pdfPreviewBtn}
+                ${reviewBtn}
+                ${verResenasBtn}
               </div>
             </div>
           </div>
@@ -893,8 +964,216 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     t._timer = setTimeout(() => t.classList.remove('show'), 3500);
   }
 
+  // ── RATINGS ────────────────────────────────────────────────────────────
+  window._ratings = {};
+  async function loadRatings() {
+    // Fetch summaries for all visible books
+    const bookIds = allBooks.map(b => b.id);
+    if (!bookIds.length) return;
+    await Promise.all(bookIds.map(async id => {
+      try {
+        const r = await fetch(`${BACKEND}/reviews/book/${id}/summary`);
+        if (r.ok) window._ratings[id] = await r.json();
+      } catch {}
+    }));
+    renderBooks(); // re-render with stars
+  }
+
+  // ── REVIEW MODAL ───────────────────────────────────────────────────────
+  let _reviewBookId = null;
+  let _reviewCal = 5;
+
+  window.openReviewModal = async function(bookId, bookName) {
+    _reviewBookId = bookId;
+    const modal = document.getElementById('reviewModal');
+    document.getElementById('reviewBookTitle').textContent = bookName;
+    document.getElementById('reviewAlert').innerHTML = '';
+    document.getElementById('reviewTitulo').value = '';
+    document.getElementById('reviewComentario').value = '';
+    setReviewStars(5);
+
+    if (isCliente && token) {
+      try {
+        const r = await fetch(`${BACKEND}/reviews/can-review/${bookId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await r.json();
+        if (!data.can_review && data.reason === 'already_reviewed') {
+          const rv = data.review;
+          document.getElementById('reviewTitulo').value = rv.titulo || '';
+          document.getElementById('reviewComentario').value = rv.comentario || '';
+          setReviewStars(rv.calificacion);
+          document.getElementById('reviewEditId').value = rv.id;
+          document.getElementById('reviewSubmitBtn').textContent = '💾 Actualizar reseña';
+        } else {
+          document.getElementById('reviewEditId').value = '';
+          document.getElementById('reviewSubmitBtn').textContent = '✅ Publicar reseña';
+        }
+        if (!data.can_review && data.reason === 'no_purchase') {
+          document.getElementById('reviewAlert').innerHTML =
+            '<div class="alert alert-error" style="margin-bottom:.75rem;font-size:.85rem">Debes comprar este libro para poder reseñarlo.</div>';
+          document.getElementById('reviewSubmitBtn').disabled = true;
+        } else {
+          document.getElementById('reviewSubmitBtn').disabled = false;
+        }
+      } catch {}
+    } else {
+      document.getElementById('reviewAlert').innerHTML =
+        '<div class="alert alert-error" style="margin-bottom:.75rem;font-size:.85rem">Inicia sesión para dejar una reseña.</div>';
+      document.getElementById('reviewSubmitBtn').disabled = true;
+    }
+
+    // Load existing reviews
+    try {
+      const r = await fetch(`${BACKEND}/reviews/book/${bookId}`);
+      const reviews = await r.json();
+      const summary = window._ratings[bookId] || { total_resenas: 0, promedio: 0 };
+      const listEl = document.getElementById('reviewList');
+      if (!reviews.length) {
+        listEl.innerHTML = '<p style="color:var(--gray-400);font-size:.88rem;text-align:center;padding:1rem 0">Sé el primero en reseñar este libro</p>';
+      } else {
+        listEl.innerHTML = reviews.map(rv => `
+          <div style="padding:.75rem 0;border-bottom:1px solid var(--gray-100)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
+              <strong style="font-size:.88rem">${rv.cliente_nombre}</strong>
+              <span style="color:#f59e0b;font-size:.95rem">${'★'.repeat(rv.calificacion)}${'☆'.repeat(5-rv.calificacion)}</span>
+            </div>
+            ${rv.titulo ? `<div style="font-weight:600;font-size:.85rem;margin-bottom:.25rem">${rv.titulo}</div>` : ''}
+            ${rv.comentario ? `<div style="font-size:.83rem;color:var(--gray-600);line-height:1.5">${rv.comentario}</div>` : ''}
+          </div>`).join('');
+        // Summary header
+        const sumEl = document.getElementById('reviewSummary');
+        if (sumEl) {
+          sumEl.innerHTML = summary.total_resenas > 0
+            ? `<div style="text-align:center;padding:.75rem;background:var(--gray-50);border-radius:var(--radius-sm);margin-bottom:.75rem">
+                 <div style="font-size:2rem;font-weight:700;color:var(--navy)">${summary.promedio.toFixed(1)}</div>
+                 <div style="color:#f59e0b;font-size:1.2rem">${'★'.repeat(Math.round(summary.promedio))}${'☆'.repeat(5-Math.round(summary.promedio))}</div>
+                 <div style="font-size:.8rem;color:var(--gray-600)">${summary.total_resenas} reseña${summary.total_resenas !== 1 ? 's' : ''}</div>
+               </div>`
+            : '';
+        }
+      }
+    } catch {}
+
+    modal.style.display = 'flex';
+  };
+
+  function setReviewStars(val) {
+    _reviewCal = val;
+    document.querySelectorAll('.rv-star').forEach(s => {
+      const v = parseInt(s.dataset.v);
+      s.textContent = v <= val ? '★' : '☆';
+      s.style.color = v <= val ? '#f59e0b' : '#d1d5db';
+    });
+  }
+
+  document.querySelectorAll('.rv-star').forEach(s => {
+    s.addEventListener('click', () => setReviewStars(parseInt(s.dataset.v)));
+    s.addEventListener('mouseenter', () => {
+      const v = parseInt(s.dataset.v);
+      document.querySelectorAll('.rv-star').forEach(x => {
+        x.style.color = parseInt(x.dataset.v) <= v ? '#f59e0b' : '#d1d5db';
+      });
+    });
+  });
+  document.getElementById('reviewStarsPicker')?.addEventListener('mouseleave', () => setReviewStars(_reviewCal));
+
+  document.getElementById('closeReviewModal')?.addEventListener('click', () => {
+    document.getElementById('reviewModal').style.display = 'none';
+  });
+
+  document.getElementById('reviewSubmitBtn')?.addEventListener('click', async () => {
+    const editId = document.getElementById('reviewEditId').value;
+    const titulo    = document.getElementById('reviewTitulo').value.trim() || null;
+    const comentario = document.getElementById('reviewComentario').value.trim() || null;
+    const btn = document.getElementById('reviewSubmitBtn');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    try {
+      if (editId) {
+        await fetch(`${BACKEND}/reviews/${editId}`, {
+          method: 'PUT', headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+          body: JSON.stringify({ calificacion: _reviewCal, titulo, comentario })
+        });
+      } else {
+        await fetch(`${BACKEND}/reviews/`, {
+          method: 'POST', headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+          body: JSON.stringify({ libro_id: _reviewBookId, calificacion: _reviewCal, titulo, comentario })
+        });
+      }
+      // refresh ratings
+      const rs = await fetch(`${BACKEND}/reviews/book/${_reviewBookId}/summary`);
+      if (rs.ok) window._ratings[_reviewBookId] = await rs.json();
+      renderBooks();
+      document.getElementById('reviewModal').style.display = 'none';
+    } catch(e) {
+      document.getElementById('reviewAlert').innerHTML =
+        `<div class="alert alert-error" style="font-size:.85rem">${e.message}</div>`;
+      btn.disabled = false; btn.textContent = editId ? '💾 Actualizar reseña' : '✅ Publicar reseña';
+    }
+  });
+
+  // ── VIEW-ONLY REVIEWS MODAL ───────────────────────────────────────────────
+  window.openViewReviewsModal = async function(bookId, bookName) {
+    const modal = document.getElementById('viewReviewsModal');
+    const body  = document.getElementById('vrBody');
+    document.getElementById('vrTitle').textContent = bookName;
+    document.getElementById('vrSub').textContent = '';
+    body.innerHTML = '<div class="vr-loading">Cargando reseñas…</div>';
+    modal.style.display = 'flex';
+    try {
+      const [revRes, sumRes] = await Promise.all([
+        fetch(`${BACKEND}/reviews/book/${bookId}`),
+        fetch(`${BACKEND}/reviews/book/${bookId}/summary`)
+      ]);
+      const reviews = revRes.ok ? await revRes.json() : [];
+      const summary = sumRes.ok ? await sumRes.json() : { promedio: 0, total_resenas: 0 };
+      document.getElementById('vrSub').textContent =
+        summary.total_resenas > 0
+          ? `⭐ ${parseFloat(summary.promedio).toFixed(1)} promedio · ${summary.total_resenas} reseña${summary.total_resenas !== 1 ? 's' : ''}`
+          : 'Aún no hay reseñas para este libro';
+      if (!reviews.length) {
+        body.innerHTML = '<div class="vr-empty"><span style="font-size:2.5rem">📭</span><p>Este libro no tiene reseñas todavía.</p></div>';
+        return;
+      }
+      body.innerHTML = reviews.map(rv => {
+        const filled = Math.round(rv.calificacion || 0);
+        const stars = '★'.repeat(filled) + '☆'.repeat(5 - filled);
+        const fecha = rv.fecha_creacion || rv.created_at
+          ? new Date(rv.fecha_creacion || rv.created_at).toLocaleDateString('es-HN')
+          : '';
+        return `<div class="vr-item">
+          <div class="vr-item-top">
+            <span class="vr-stars">${stars}</span>
+            ${fecha ? `<span class="vr-date">${fecha}</span>` : ''}
+          </div>
+          ${rv.titulo ? `<div class="vr-titulo">${rv.titulo}</div>` : ''}
+          ${rv.comentario || rv.cuerpo ? `<div class="vr-cuerpo">${rv.comentario || rv.cuerpo}</div>` : ''}
+          <div class="vr-author">— ${rv.usuario_nombre || rv.usuario?.nombre || 'Lector'}</div>
+        </div>`;
+      }).join('');
+    } catch(e) {
+      body.innerHTML = '<div class="vr-empty" style="color:var(--danger)">Error al cargar reseñas.</div>';
+    }
+  };
+
   init();
   updateCartBadgeNav();
+
+  // ── DARK MODE init & sync toggle label ───────────────────────────────────
+  (function(){
+    const saved = localStorage.getItem('darkMode');
+    const pref  = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const on    = saved === 'true' || (saved === null && pref);
+    if (on) document.documentElement.classList.add('dark');
+    const btn = document.getElementById('darkToggleCatalog');
+    if (btn) btn.textContent = on ? '☀️' : '🌙';
+  })();
+  window.toggleDark = function() {
+    const on = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('darkMode', on);
+    const btn = document.getElementById('darkToggleCatalog');
+    if (btn) btn.textContent = on ? '☀️' : '🌙';
+  };
 
   // Login-required modal: close on overlay click or ESC
   document.addEventListener('click', function(e) {
@@ -922,6 +1201,8 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .btn-outline-nav:hover { background:rgba(255,255,255,0.1); }
   .btn-ghost-nav { background:transparent; color:rgba(255,255,255,0.7); }
   .btn-ghost-nav:hover { color:white; }
+  .dark-toggle-nav { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); border-radius:99px; padding:.3rem .65rem; cursor:pointer; font-size:.85rem; color:white; transition:all .15s; }
+  .dark-toggle-nav:hover { background:rgba(255,255,255,0.2); }
 
   /* HERO */
   .hero-section { position:relative; background:linear-gradient(135deg,var(--navy) 0%,var(--blue-dark) 50%,#1e3a6e 100%); padding:4rem 2rem 3.5rem; overflow:hidden; }
@@ -948,10 +1229,11 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
 
   /* MAIN */
   .main-wrap { max-width:1400px; margin:0 auto; padding:2.5rem 2.5rem; }
-  body { background: #eef1f7 !important; }
+  body { background: var(--bg-page); }
+  html.dark body { background: #07101f !important; }
 
   /* STATS BAR */
-  .stats-bar { background:white; border-radius:var(--radius); border:1px solid var(--gray-200); padding:1rem 1.5rem; margin-bottom:1.5rem; box-shadow:var(--shadow-sm); }
+  .stats-bar { background:var(--bg-card); border-radius:var(--radius); border:1px solid var(--gray-200); padding:1rem 1.5rem; margin-bottom:1.5rem; box-shadow:var(--shadow-sm); }
   .stats-inner { display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap; }
   .stat-item { display:flex; align-items:center; gap:0.5rem; }
   .stat-icon { font-size:1.1rem; }
@@ -967,10 +1249,10 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
 
   /* TOOLBAR + ADVANCED FILTERS */
   .adv-bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem; gap:1rem; flex-wrap:wrap; }
-  .adv-toggle-btn { display:inline-flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; border:1.5px solid var(--gray-200); border-radius:var(--radius-sm); background:white; font-family:var(--font-body); font-size:0.85rem; color:var(--gray-600); cursor:pointer; font-weight:500; transition:all 0.15s; }
+  .adv-toggle-btn { display:inline-flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; border:1.5px solid var(--gray-200); border-radius:var(--radius-sm); background:var(--bg-card); font-family:var(--font-body); font-size:0.85rem; color:var(--gray-600); cursor:pointer; font-weight:500; transition:all 0.15s; }
   .adv-toggle-btn:hover { border-color:var(--blue-mid); color:var(--blue-mid); }
   .adv-count { background:var(--blue-mid); color:white; border-radius:999px; width:20px; height:20px; font-size:0.72rem; font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
-  .adv-panel { background:white; border:1.5px solid var(--gray-200); border-radius:var(--radius); padding:1.25rem 1.5rem 1rem; margin-bottom:1.25rem; box-shadow:var(--shadow-sm); animation:slideDown 0.2s ease; }
+  .adv-panel { background:var(--bg-card); border:1.5px solid var(--gray-200); border-radius:var(--radius); padding:1.25rem 1.5rem 1rem; margin-bottom:1.25rem; box-shadow:var(--shadow-sm); animation:slideDown 0.2s ease; }
   @keyframes slideDown { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:none} }
   .adv-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:1rem; margin-bottom:1rem; }
   .adv-field { display:flex; flex-direction:column; gap:0.3rem; }
@@ -985,7 +1267,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .btn-sm { padding:0.4rem 1rem; font-size:0.825rem; }
   .sort-group { display:flex; align-items:center; gap:0.5rem; }
   .sort-label { font-size:0.85rem; color:var(--gray-400); font-weight:500; }
-  .sort-select { padding:0.5rem 0.75rem; border:1.5px solid var(--gray-200); border-radius:var(--radius-sm); font-family:var(--font-body); font-size:0.85rem; color:var(--gray-800); background:white; cursor:pointer; }
+  .sort-select { padding:0.5rem 0.75rem; border:1.5px solid var(--border-color); border-radius:var(--radius-sm); font-family:var(--font-body); font-size:0.85rem; color:var(--text-main); background:var(--bg-card); cursor:pointer; }
   .sort-select:focus { outline:none; border-color:var(--blue-mid); }
   /* INFINITE SCROLL */
   .scroll-loader { display:flex; align-items:center; justify-content:center; gap:0.75rem; padding:2rem; color:var(--gray-400); font-size:0.875rem; }
@@ -998,7 +1280,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   /* ============================================================
      BOOK CARD — altura fija, espaciado generoso
      ============================================================ */
-  .book-card { background:white; border-radius:var(--radius); overflow:hidden; box-shadow:0 2px 16px rgba(13,27,46,0.12), 0 1px 4px rgba(13,27,46,0.06); border:1px solid rgba(13,27,46,0.07); transition:all 0.3s cubic-bezier(0.25,0.8,0.25,1); display:flex; flex-direction:column; }
+  .book-card { position:relative; background:var(--bg-card); border-radius:var(--radius); overflow:hidden; box-shadow:0 2px 16px rgba(13,27,46,0.12), 0 1px 4px rgba(13,27,46,0.06); border:1px solid rgba(13,27,46,0.07); transition:all 0.3s cubic-bezier(0.25,0.8,0.25,1); display:flex; flex-direction:column; }
   .book-card:hover { transform:translateY(-5px); box-shadow:0 12px 36px rgba(13,27,46,0.14); border-color:transparent; }
   .book-card.oos { opacity:0.7; }
 
@@ -1030,8 +1312,33 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .book-name { font-family:var(--font-display); font-size:0.97rem; font-weight:700; color:var(--navy); line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin-top:0.1rem; }
   .book-author { font-size:0.78rem; color:var(--gray-400); font-weight:500; }
   .book-editorial { font-size:0.72rem; color:var(--gray-400); }
-  .book-bottom { display:flex; align-items:flex-end; justify-content:space-between; margin-top:auto; padding-top:0.75rem; border-top:1px solid var(--gray-100); gap:0.5rem; }
-  .book-price { font-size:1.05rem; font-weight:700; color:var(--blue-mid); }
+  .book-bottom { display:flex; align-items:flex-start; justify-content:space-between; margin-top:auto; padding-top:0.75rem; border-top:1px solid var(--gray-100); gap:0.5rem; }
+  .book-stars, .book-stars-empty { display:flex; align-items:center; gap:.35rem; font-size:.78rem; cursor:pointer; margin:.3rem 0; color:var(--gray-500); }
+  .book-stars:hover, .book-stars-empty:hover { opacity:.8; }
+  .star-count { font-size:.75rem; color:var(--gray-400); }
+  .btn-review { background:var(--beige-light); color:#92400e; border:none; border-radius:6px; padding:3px 9px; font-size:.7rem; font-weight:600; cursor:pointer; white-space:nowrap; transition:all .15s; }
+  .btn-review:hover { background:var(--beige); }
+  .btn-ver-resenas { background:#fef9c3; color:#92400e; border:1px solid #fde68a; border-radius:6px; padding:3px 9px; font-size:.7rem; font-weight:700; cursor:pointer; white-space:nowrap; transition:all .15s; font-family:inherit; }
+  .btn-ver-resenas:hover { background:#fde68a; }
+
+  /* View-only reviews modal */
+  .vr-box { background:white; border-radius:var(--radius-lg); box-shadow:0 20px 60px rgba(0,0,0,.28); width:100%; max-width:580px; max-height:88vh; display:flex; flex-direction:column; overflow:hidden; animation:vrSlide .22s ease; }
+  @keyframes vrSlide { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
+  .vr-header { display:flex; align-items:flex-start; justify-content:space-between; padding:1.25rem 1.5rem; border-bottom:1px solid var(--gray-100); flex-shrink:0; gap:1rem; }
+  .vr-title { font-family:var(--font-display); font-size:1.15rem; font-weight:700; color:var(--navy); line-height:1.3; }
+  .vr-sub { font-size:.82rem; color:var(--gray-400); margin-top:3px; }
+  .vr-close { width:32px; height:32px; border-radius:50%; background:var(--gray-100); border:none; cursor:pointer; font-size:.85rem; flex-shrink:0; transition:background .15s; }
+  .vr-close:hover { background:var(--gray-200); }
+  .vr-body { overflow-y:auto; flex:1; padding:1.25rem 1.5rem; display:flex; flex-direction:column; gap:.875rem; }
+  .vr-loading,.vr-empty { text-align:center; padding:2.5rem 1rem; color:var(--gray-400); display:flex; flex-direction:column; align-items:center; gap:.5rem; }
+  .vr-item { background:var(--gray-50); border:1px solid var(--gray-100); border-radius:10px; padding:1rem; }
+  .vr-item-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:.35rem; }
+  .vr-stars { color:#f59e0b; font-size:1rem; letter-spacing:1px; }
+  .vr-date { font-size:.72rem; color:var(--gray-400); }
+  .vr-titulo { font-weight:700; font-size:.88rem; color:var(--navy); margin-bottom:.25rem; }
+  .vr-cuerpo { font-size:.85rem; color:var(--gray-600); line-height:1.6; }
+  .vr-author { font-size:.75rem; color:var(--gray-400); font-style:italic; margin-top:.4rem; }
+  .book-price { font-size:1.05rem; font-weight:700; color:var(--blue-mid); white-space:nowrap; }
   .book-stock { font-size:0.72rem; font-weight:600; margin-top:2px; }
   .book-stock.ok { color:#16a34a; }
   .book-stock.low { color:#d97706; }
@@ -1042,7 +1349,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   /* SKELETON — misma altura que la cover real */
   @keyframes shimmer { 0%{background-position:-500px 0} 100%{background-position:500px 0} }
   .skeleton { background:linear-gradient(90deg,var(--gray-100) 25%,var(--gray-200) 50%,var(--gray-100) 75%); background-size:1000px 100%; animation:shimmer 1.5s infinite linear; border-radius:var(--radius-sm); }
-  .book-skeleton { background:white; border-radius:var(--radius); overflow:hidden; border:1px solid var(--gray-200); }
+  .book-skeleton { background:var(--bg-card); border-radius:var(--radius); overflow:hidden; border:1px solid var(--gray-200); }
   .sk-img { height:200px; border-radius:0; }
   .sk-body { padding:1rem 1.125rem 1.125rem; display:flex; flex-direction:column; gap:0.6rem; }
   .sk-badge { height:16px; width:65px; border-radius:999px; }
@@ -1059,7 +1366,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
 
   /* BUY MODAL */
   .buy-modal-overlay { position:fixed; inset:0; background:rgba(13,27,46,0.65); backdrop-filter:blur(4px); z-index:8000; display:flex; align-items:center; justify-content:center; padding:1rem; }
-  .buy-modal-box { background:white; border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); width:100%; max-width:460px; overflow:hidden; animation:slideUp 0.25s ease; }
+  .buy-modal-box { background:var(--bg-card); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); width:100%; max-width:460px; overflow:hidden; animation:slideUp 0.25s ease; }
   @keyframes slideUp { from{opacity:0;transform:translateY(20px) scale(0.97)} to{opacity:1;transform:none} }
   .buy-modal-header { display:flex; align-items:center; justify-content:space-between; padding:1.25rem 1.5rem; border-bottom:1px solid var(--gray-100); }
   .buy-modal-title { font-family:var(--font-display); font-size:1.25rem; color:var(--navy); }
@@ -1083,7 +1390,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .pay-method-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:0.5rem; margin-bottom:0.75rem; }
   .pay-method-opt { cursor:pointer; }
   .pay-method-opt input { display:none; }
-  .pay-method-card { display:flex; align-items:center; justify-content:center; padding:0.55rem; border:1.5px solid var(--gray-200); border-radius:var(--radius-sm); font-size:0.78rem; font-weight:600; transition:all 0.15s; background:white; gap:0.3rem; }
+  .pay-method-card { display:flex; align-items:center; justify-content:center; padding:0.55rem; border:1.5px solid var(--gray-200); border-radius:var(--radius-sm); font-size:0.78rem; font-weight:600; transition:all 0.15s; background:var(--bg-card); gap:0.3rem; }
   .pay-method-opt input:checked + .pay-method-card { border-color:var(--blue-mid); background:var(--blue-ghost); color:var(--blue-mid); }
   .pay-method-card:hover { border-color:var(--blue-mid); }
   .card-fields-wrap { margin-bottom:0.5rem; }
@@ -1111,7 +1418,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .btn-owned { display:flex; align-items:center; gap:0.3rem; padding:5px 10px; border-radius:6px; background:#dcfce7; color:#16a34a; font-size:0.72rem; font-weight:700; border:1px solid #86efac; white-space:nowrap; }
 
   /* ── TOAST NOTIFICATION ── */
-  .cart-toast { position:fixed; bottom:2rem; right:2rem; background:white; border-radius:12px; padding:0.875rem 1.25rem; box-shadow:0 8px 30px rgba(13,27,46,0.18); border:1px solid #e2e8f0; display:flex; align-items:center; gap:0.75rem; font-size:0.875rem; color:#0d1b2e; z-index:9999; transform:translateY(120%); opacity:0; transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1); max-width:360px; border-left:4px solid #2563eb; }
+  .cart-toast { position:fixed; bottom:2rem; right:2rem; background:var(--bg-card); border-radius:12px; padding:0.875rem 1.25rem; box-shadow:0 8px 30px rgba(13,27,46,0.18); border:1px solid #e2e8f0; display:flex; align-items:center; gap:0.75rem; font-size:0.875rem; color:#0d1b2e; z-index:9999; transform:translateY(120%); opacity:0; transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1); max-width:360px; border-left:4px solid #2563eb; }
   .cart-toast.show { transform:translateY(0); opacity:1; }
   .cart-toast a { color:#2563eb; font-weight:700; text-decoration:none; white-space:nowrap; }
   .cart-toast a:hover { text-decoration:underline; }
@@ -1121,7 +1428,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
 
   /* ── PDF PREVIEW MODAL ── */
   .pdf-prev-overlay { position:fixed;inset:0;background:rgba(13,27,46,0.82);backdrop-filter:blur(6px);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem; }
-  .pdf-prev-box { background:white;border-radius:12px;width:100%;max-width:720px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+  .pdf-prev-box { background:var(--bg-card);border-radius:12px;width:100%;max-width:720px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.5); }
   .pdf-prev-topbar { display:flex;align-items:center;justify-content:space-between;padding:0.875rem 1.25rem;background:#0d1b2e;gap:1rem;flex-shrink:0; }
   .pdf-prev-meta { flex:1;min-width:0; }
   .pdf-prev-title { font-weight:700;font-size:0.9rem;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
@@ -1147,7 +1454,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   /* ===== Login Required Modal ===== */
   .lrm-overlay { position:fixed; inset:0; background:rgba(13,27,46,0.65); backdrop-filter:blur(4px); z-index:10000; display:flex; align-items:center; justify-content:center; padding:1rem; animation:lrmFadeIn 0.2s ease; }
   @keyframes lrmFadeIn { from { opacity:0; } to { opacity:1; } }
-  .lrm-box { position:relative; background:white; border-radius:20px; padding:2.5rem 2rem 2rem; max-width:420px; width:100%; text-align:center; box-shadow:0 24px 60px rgba(13,27,46,0.22); animation:lrmSlideUp 0.25s cubic-bezier(0.34,1.56,0.64,1); }
+  .lrm-box { position:relative; background:var(--bg-card); border-radius:20px; padding:2.5rem 2rem 2rem; max-width:420px; width:100%; text-align:center; box-shadow:0 24px 60px rgba(13,27,46,0.22); animation:lrmSlideUp 0.25s cubic-bezier(0.34,1.56,0.64,1); }
   @keyframes lrmSlideUp { from { transform:translateY(28px); opacity:0; } to { transform:translateY(0); opacity:1; } }
   .lrm-icon { font-size:3rem; margin-bottom:0.75rem; display:block; }
   .lrm-title { font-size:1.3rem; font-weight:800; color:#0d1b2e; margin:0 0 0.75rem; line-height:1.3; }
@@ -1160,5 +1467,290 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .lrm-btn-secondary:hover { background:#e2e8f0; transform:translateY(-1px); }
   .lrm-close { position:absolute; top:0.9rem; right:0.9rem; background:none; border:none; font-size:1rem; color:#94a3b8; cursor:pointer; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border-radius:50%; transition:all 0.2s; }
   .lrm-close:hover { background:#f1f5f9; color:#475569; }
+  /* Review modal inner box */
+  .review-modal-inner { background:var(--bg-card); color:var(--text-main); }
+  html.dark .lrm-title  { color: #f1f5f9; }
+  html.dark .lrm-body   { color: #94a3b8; }
+  html.dark .lrm-close  { color: #64748b; }
+  html.dark .lrm-close:hover { background: rgba(255,255,255,0.08); color: #94a3b8; }
+  html.dark .lrm-btn-secondary { background: rgba(255,255,255,0.06); color: #e2e8f0; border-color: rgba(255,255,255,0.1); }
+  html.dark .lrm-btn-secondary:hover { background: rgba(255,255,255,0.12); }
+  html.dark .cart-toast { color: #e2e8f0; border-color: rgba(255,255,255,0.08); }
+  html.dark .cart-toast a { color: #60a5fa; }
+  /* adv panel dark */
+  html.dark .adv-toggle-btn { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); color: #94a3b8; }
+  html.dark .adv-toggle-btn:hover { border-color: var(--blue-mid); color: #93c5fd; }
+  html.dark .adv-panel { border-color: rgba(255,255,255,0.08); }
+  html.dark .adv-label { color: #64748b; }
+  html.dark .adv-input { background: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.12) !important; color: #e2e8f0 !important; }
+  html.dark .adv-check { color: #94a3b8; }
+  html.dark .adv-actions { border-color: rgba(255,255,255,0.07); }
+  /* buy modal dark */
+  html.dark .buy-modal-title { color: #f1f5f9; }
+  html.dark .buy-modal-header { border-color: rgba(255,255,255,0.08); }
+  html.dark .buy-modal-close { background: rgba(255,255,255,0.08); color: #94a3b8; }
+  html.dark .buy-book-card { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); }
+  html.dark .buy-book-name { color: #f1f5f9; }
+  html.dark .buy-book-price-unit { color: #60a5fa; }
+  html.dark .buy-book-avail { color: #64748b; }
+  html.dark .buy-modal-footer { border-color: rgba(255,255,255,0.08); }
+  html.dark .buy-section-title { color: #64748b; }
+  html.dark .pay-method-card { border-color: rgba(255,255,255,0.12); color: #94a3b8; }
+  html.dark .pay-method-opt input:checked + .pay-method-card { border-color: #3b82f6; background: rgba(37,99,235,0.15); color: #93c5fd; }
+  html.dark .buy-total-row { background: rgba(37,99,235,0.1); border-color: rgba(37,99,235,0.2); }
+  html.dark .buy-digital-notice { background: rgba(37,99,235,0.1); border-color: rgba(37,99,235,0.2); }
+  html.dark .buy-digital-title { color: #93c5fd; }
+  html.dark .buy-digital-desc { color: #60a5fa; }
+  /* review modal dark */
+  html.dark .review-modal-inner { background: rgba(15,23,42,0.97) !important; border: 1px solid rgba(255,255,255,0.1); color: #e2e8f0; }
+  html.dark .review-modal-inner h2 { color: #f1f5f9; }
+  html.dark #reviewTitulo,
+  html.dark #reviewComentario { background: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.12) !important; color: #e2e8f0 !important; }
+  html.dark #reviewSummary > div { background: rgba(255,255,255,0.05) !important; }
+  html.dark #reviewList > div { border-color: rgba(255,255,255,0.07) !important; }
+  /* sort select */
+  html.dark .sort-select option { background: #0f172a; color: #e2e8f0; }
+  /* stats bar */
+  html.dark .stats-bar { background: rgba(255,255,255,0.04) !important; border-color: rgba(255,255,255,0.08) !important; }
+  html.dark .stat-num { color: #93c5fd; }
+  html.dark .stat-lbl { color: #64748b; }
+  html.dark .stat-divider { background: rgba(255,255,255,0.1); }
+
+
+  /* ══════════════════════════════════════════════════════════════════════
+     MODO OSCURO — CATÁLOGO
+     Estrategia: fondo profundo navy + tarjetas liquid glass + colores vivos
+  ════════════════════════════════════════════════════════════════════════ */
+
+  html.dark body {
+    background: #07101f;
+    color: #e2e8f0;
+  }
+
+  /* Fondo general de la página */
+  html.dark .main-wrap {
+    background: transparent;
+  }
+
+  /* Hero: no cambia, ya es oscuro */
+
+  /* Stats bar */
+  html.dark .stats-bar {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.08);
+    backdrop-filter: blur(12px);
+  }
+  html.dark .stat-num  { color: #e2e8f0; }
+  html.dark .stat-lbl  { color: #64748b; }
+  html.dark .stat-divider { background: rgba(255,255,255,0.1); }
+
+  /* Toolbar */
+  html.dark .toolbar { background: transparent; }
+  html.dark .sort-label { color: #94a3b8; }
+  html.dark .sort-select {
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(255,255,255,0.12);
+    color: #e2e8f0;
+  }
+  html.dark .sort-select option { background: #0f172a; }
+
+  /* Filter pills */
+  html.dark .filter-pill {
+    background: rgba(37,99,235,0.2);
+    border-color: rgba(37,99,235,0.4);
+    color: #93c5fd;
+  }
+  html.dark .filter-pill:hover { background: rgba(37,99,235,0.35); }
+
+  /* ── LIQUID GLASS BOOK CARDS ─────────────────────────────────────────── */
+  html.dark .book-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.10);
+    box-shadow:
+      0 4px 24px rgba(0,0,0,0.4),
+      inset 0 1px 0 rgba(255,255,255,0.08);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+  }
+  html.dark .book-card:hover {
+    background: rgba(255,255,255,0.09);
+    border-color: rgba(99,179,237,0.35);
+    box-shadow:
+      0 8px 40px rgba(0,0,0,0.5),
+      0 0 0 1px rgba(99,179,237,0.2),
+      inset 0 1px 0 rgba(255,255,255,0.12);
+    transform: translateY(-6px);
+  }
+  html.dark .book-card.oos {
+    background: rgba(255,255,255,0.02);
+    border-color: rgba(255,255,255,0.05);
+  }
+
+  /* Glass shimmer effect on top edge */
+  html.dark .book-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255,255,255,0.15) 30%,
+      rgba(255,255,255,0.25) 50%,
+      rgba(255,255,255,0.15) 70%,
+      transparent 100%
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* Book info section inside card */
+  html.dark .book-info {
+    background: transparent;
+  }
+  html.dark .book-name  { color: #f1f5f9; }
+  html.dark .book-author { color: #64748b; }
+  html.dark .book-editorial { color: #475569; }
+  html.dark .book-price { color: #60a5fa; }
+  html.dark .book-card.has-discount .book-price { color: #f87171; }
+  html.dark .book-price-original { color: #475569; }
+  html.dark .book-bottom {
+    border-top-color: rgba(255,255,255,0.07);
+  }
+  html.dark .book-stock.ok  { color: #4ade80; }
+  html.dark .book-stock.low { color: #fbbf24; }
+  html.dark .book-stock.out { color: #f87171; }
+
+  /* Category tags — keep their colors but slightly muted */
+  html.dark .book-cat-tag {
+    opacity: 0.85;
+  }
+
+  /* Skeleton */
+  html.dark .book-skeleton {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.07);
+  }
+  html.dark .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgba(255,255,255,0.04) 25%,
+      rgba(255,255,255,0.09) 50%,
+      rgba(255,255,255,0.04) 75%
+    );
+    background-size: 1000px 100%;
+  }
+
+  /* Stars & reviews */
+  html.dark .book-stars       { color: #94a3b8; }
+  html.dark .book-stars-empty { color: #334155; }
+  html.dark .star-count { color: #475569; }
+
+  /* Buttons inside card */
+  html.dark .btn-cart {
+    background: rgba(37,99,235,0.7);
+    box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+  }
+  html.dark .btn-cart:hover { background: rgba(37,99,235,0.9); }
+  html.dark .btn-buy {
+    background: rgba(37,99,235,0.7);
+    box-shadow: 0 2px 8px rgba(37,99,235,0.2);
+  }
+  html.dark .btn-buy:hover { background: rgba(37,99,235,0.9); }
+  html.dark .btn-owned {
+    background: rgba(22,163,74,0.15);
+    color: #4ade80;
+    border-color: rgba(74,222,128,0.25);
+  }
+  html.dark .btn-review {
+    background: rgba(180,150,80,0.15);
+    color: #fcd34d;
+    border: 1px solid rgba(252,211,77,0.2);
+  }
+  html.dark .btn-review:hover { background: rgba(180,150,80,0.3); }
+
+  /* Review modal in dark */
+  html.dark #reviewModal > div {
+    background: rgba(15,23,42,0.92);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(24px);
+    color: #e2e8f0;
+  }
+  html.dark #reviewModal h2      { color: #f1f5f9; }
+  html.dark #reviewModal input,
+  html.dark #reviewModal textarea {
+    background: rgba(255,255,255,0.05) !important;
+    border-color: rgba(255,255,255,0.12) !important;
+    color: #e2e8f0 !important;
+  }
+  html.dark #reviewModal input::placeholder,
+  html.dark #reviewModal textarea::placeholder { color: #475569; }
+  html.dark #reviewSummary > div { background: rgba(255,255,255,0.05) !important; }
+  html.dark #reviewSummary .promedio { color: #f1f5f9 !important; }
+
+  /* Buy modal in dark */
+  html.dark .buy-modal-box {
+    background: rgba(15,23,42,0.95);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(24px);
+    color: #e2e8f0;
+  }
+  html.dark .buy-modal-title { color: #f1f5f9; }
+  html.dark .buy-modal-close { color: #94a3b8; }
+  html.dark .buy-book-card {
+    background: rgba(255,255,255,0.05);
+    border-color: rgba(255,255,255,0.08);
+  }
+  html.dark .buy-book-name  { color: #f1f5f9; }
+  html.dark .buy-qty-label  { color: #94a3b8; }
+  html.dark .buy-qty-btn    { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); color: #e2e8f0; }
+  html.dark .buy-total-row  { border-color: rgba(255,255,255,0.08); }
+  html.dark .buy-total-label { color: #94a3b8; }
+  html.dark .buy-modal-footer { border-color: rgba(255,255,255,0.08); }
+  html.dark .buy-modal-header { border-color: rgba(255,255,255,0.08); }
+
+  /* Login required modal in dark */
+  html.dark .lrm-box {
+    background: rgba(15,23,42,0.95);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(24px);
+  }
+  html.dark .lrm-title  { color: #f1f5f9; }
+  html.dark .lrm-body   { color: #94a3b8; }
+
+  /* Scroll loader */
+  html.dark .scroll-loader { color: #475569; }
+  html.dark .scroll-spinner { border-color: rgba(255,255,255,0.1); border-top-color: #3b82f6; }
+
+  /* Cart toast */
+  html.dark .cart-toast {
+    background: rgba(15,23,42,0.95);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(16px);
+    color: #e2e8f0;
+  }
+  html.dark .cart-toast a { color: #60a5fa; }
+
+  /* Advanced filters panel */
+  html.dark .adv-filters-box {
+    background: rgba(15,23,42,0.95);
+    border-color: rgba(255,255,255,0.1);
+    backdrop-filter: blur(16px);
+  }
+  html.dark .adv-label  { color: #94a3b8; }
+  html.dark .adv-input  { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); color: #e2e8f0; }
+  html.dark .adv-toggle { color: #94a3b8; }
+  html.dark .adv-toggle:hover { color: #e2e8f0; }
+
+  html.dark .btn-ver-resenas { background:rgba(245,158,11,.15); color:#fcd34d; border-color:rgba(245,158,11,.25); }
+  html.dark .btn-ver-resenas:hover { background:rgba(245,158,11,.3); }
+  html.dark .vr-box { background:#0f172a; border:1px solid rgba(255,255,255,.1); }
+  html.dark .vr-title { color:#f1f5f9; }
+  html.dark .vr-sub { color:#64748b; }
+  html.dark .vr-header { border-color:rgba(255,255,255,.08); }
+  html.dark .vr-close { background:rgba(255,255,255,.1); color:#94a3b8; }
+  html.dark .vr-item { background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.08); }
+  html.dark .vr-titulo { color:#e2e8f0; }
+  html.dark .vr-cuerpo { color:#94a3b8; }
+  html.dark .vr-author { color:#475569; }
 
 </style>

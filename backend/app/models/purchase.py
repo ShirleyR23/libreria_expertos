@@ -21,8 +21,8 @@ class Purchase(Base):
     # SQLite no soporta FK en ALTER TABLE, se maneja a nivel de aplicación
     supplier_id = Column(Integer, nullable=True)
 
-    # Empleado que registró la compra
-    empleado_id = Column(Integer, ForeignKey("empleados.id"), nullable=False)
+    # Empleado que registró la compra (nullable para permitir pedidos por Admin sin registro de empleado)
+    empleado_id = Column(Integer, ForeignKey("empleados.id"), nullable=True)
 
     # Totales
     subtotal = Column(Numeric(12, 2), nullable=False)

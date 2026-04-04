@@ -112,7 +112,7 @@ class SupplierService:
             self.db.commit()
         return self.get_by_id(supplier_id)
 
-    def create_order(self, supplier_id: int, order: OrderFromSupplier, empleado_id: int) -> dict:
+    def create_order(self, supplier_id: int, order: OrderFromSupplier, empleado_id: int | None = None) -> dict:
         """Crea una compra (pedido) a un proveedor."""
         supplier = self.db.query(Supplier).filter(Supplier.id == supplier_id).first()
         if not supplier:

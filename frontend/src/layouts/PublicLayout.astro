@@ -43,9 +43,63 @@ const { title } = Astro.props;
       --radius-lg: 20px;
       --font-display: 'Playfair Display', Georgia, serif;
       --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+      /* surface tokens used for dark mode */
+      --bg-page: var(--gray-50);
+      --bg-card: #ffffff;
+      --text-main: var(--gray-800);
+      --border-color: var(--gray-200);
     }
+    /* ── DARK MODE ──────────────────────────────────────────── */
+    html.dark {
+      --bg-page: #0f172a;
+      --bg-card: #1e293b;
+      --text-main: #e2e8f0;
+      --border-color: #334155;
+      --gray-50: #1e293b;
+      --gray-100: #334155;
+      --gray-200: #475569;
+      --gray-400: #94a3b8;
+      --gray-600: #cbd5e1;
+      --gray-800: #f1f5f9;
+      --navy: #e2e8f0;
+      --blue-ghost: #1e3a5f;
+      --blue-pale: #1e3a5f;
+      --beige-pale: #1e293b;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+      --shadow: 0 4px 16px rgba(0,0,0,0.35);
+    }
+    html.dark .card { background: var(--bg-card); border-color: var(--border-color); color: var(--text-main); }
+    html.dark .form-input { background: rgba(255,255,255,0.06) !important; color: #e2e8f0 !important; border-color: rgba(255,255,255,0.12) !important; }
+    html.dark .form-input::placeholder { color: #475569 !important; }
+    html.dark .form-input:focus { border-color: var(--blue-mid) !important; box-shadow: 0 0 0 3px rgba(37,99,235,0.2) !important; }
+    html.dark .form-label { color: #94a3b8 !important; }
+    html.dark .btn-secondary { background: #1e293b; color: var(--text-main); border-color: var(--border-color); }
+    html.dark .btn-secondary:hover { background: #334155; }
+    html.dark .modal-box { background: #1e293b; color: var(--text-main); }
+    html.dark .modal-header { border-color: #334155; }
+    html.dark .modal-body { color: #94a3b8; }
+    html.dark select { background: #1e293b; color: var(--text-main); border-color: #334155; }
+    html.dark .auth-right { background: #0a0f1e !important; }
+    html.dark .login-title   { color: #f1f5f9 !important; }
+    html.dark .login-subtitle { color: #64748b !important; }
+    html.dark .auth-divider::before { background: rgba(255,255,255,0.1) !important; }
+    html.dark .auth-divider span { background: #0a0f1e !important; color: #475569 !important; }
+    html.dark .demo-btn { background: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.1) !important; }
+    html.dark .demo-btn:hover { background: rgba(37,99,235,0.15) !important; border-color: rgba(37,99,235,0.4) !important; }
+    html.dark .demo-email { color: #94a3b8 !important; }
+    html.dark .catalog-link-btn { background: rgba(255,255,255,0.04) !important; border-color: rgba(255,255,255,0.1) !important; color: #64748b !important; }
+    html.dark .catalog-link-btn:hover { background: rgba(37,99,235,0.1) !important; border-color: rgba(37,99,235,0.35) !important; color: #93c5fd !important; }
+    html.dark .input-wrap .toggle-pw { color: #64748b !important; }
+    html.dark .auth-footer-link { color: #64748b !important; }
+    html.dark .auth-alert-error { background: rgba(220,38,38,0.15) !important; color: #f87171 !important; border-color: rgba(248,113,113,0.2) !important; }
+    html.dark .admin-role   { background: rgba(217,119,6,0.15) !important;  color: #fcd34d !important; }
+    html.dark .empleado-role{ background: rgba(37,99,235,0.15) !important;  color: #93c5fd !important; }
+    html.dark .cliente-role { background: rgba(22,163,74,0.15)  !important; color: #4ade80 !important; }
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: var(--font-body); background: var(--gray-50); color: var(--gray-800); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+    body { font-family: var(--font-body); background: var(--bg-page); color: var(--text-main); min-height: 100vh; -webkit-font-smoothing: antialiased; transition: background .25s, color .25s; }
+    /* dark mode toggle button */
+    .dark-toggle { background: none; border: 1.5px solid var(--border-color); border-radius: 99px; padding: .3rem .75rem; cursor: pointer; font-size: .82rem; color: var(--text-main); display:flex;align-items:center;gap:.35rem;transition:all .15s; }
+    .dark-toggle:hover { background: var(--gray-100); }
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.625rem 1.25rem; border: none; border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease; text-decoration: none; white-space: nowrap; }
     .btn-primary { background: var(--blue-mid); color: white; }
     .btn-primary:hover { background: var(--blue-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.4); }
@@ -133,6 +187,23 @@ const { title } = Astro.props;
     document.getElementById('modalOverlay').addEventListener('click', e => {
       if (e.target === document.getElementById('modalOverlay')) Modal.hide();
     });
+  </script>
+  <script is:inline>
+    /* Dark mode — apply before paint to avoid flash */
+    (function(){
+      const saved = localStorage.getItem('darkMode');
+      const pref  = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (saved === 'true' || (saved === null && pref)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+    window.toggleDark = function() {
+      const on = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('darkMode', on);
+      document.querySelectorAll('.dark-toggle').forEach(b => {
+        b.innerHTML = on ? '☀️ Claro' : '🌙 Oscuro';
+      });
+    };
   </script>
 </body>
 </html>

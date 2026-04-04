@@ -1,104 +1,32 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-
 const userStr = Astro.cookies.get('user')?.value;
 let user = null;
 try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
-if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) return Astro.redirect('/login');
+if (!user || user.role_name !== 'ADMIN') return Astro.redirect('/login');
 ---
-
-<DashboardLayout title="Dashboard Empleado" userRole={user.role_name}>
-  <div class="grid grid-3">
-    <div class="stat-card"><div class="stat-value" id="statAlertas" style="color:#f59e0b"><span class="skeleton sk-val"></span></div><div class="stat-label">Alertas de Stock</div></div>
-    <div class="stat-card"><div class="stat-value" id="statUrgentes" style="color:#ef4444"><span class="skeleton sk-val"></span></div><div class="stat-label">Compras Urgentes</div></div>
-    <div class="stat-card"><div class="stat-value" id="statVentasRec" style="color:#22c55e"><span class="skeleton sk-val"></span></div><div class="stat-label">Ventas Recientes (hoy)</div></div>
-  </div>
-
-  <div class="grid grid-2 mt-4">
-    <div class="card">
-      <div class="card-header">
-        <h2 class="card-title">Accesos Rápidos</h2>
-        <button id="refreshBtn" class="btn btn-secondary btn-sm">🔄 Actualizar</button>
-      </div>
-      <div class="quick-links">
-        <a href="/inventario" class="quick-link"><span class="icon">📚</span><span>Ver Inventario</span></a>
-        <a href="/ventas" class="quick-link"><span class="icon">💰</span><span>Registrar Venta</span></a>
-        <a href="/sistema-experto" class="quick-link"><span class="icon">🤖</span><span>Sistema Experto</span></a>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><h2 class="card-title">Ventas Recientes</h2></div>
-      <div id="recentSalesWrap">
-        <div class="loading-row"><span class="skeleton" style="height:48px;border-radius:8px;display:block;margin-bottom:8px"></span><span class="skeleton" style="height:48px;border-radius:8px;display:block;margin-bottom:8px"></span><span class="skeleton" style="height:48px;border-radius:8px;display:block"></span></div>
-      </div>
-      <p class="last-updated" id="lastUpdated"></p>
-    </div>
-  </div>
-</DashboardLayout>
-
-<script is:inline>
-  const API = 'http://localhost:8000/api/v1';
-  const token = localStorage.getItem('token');
-
-  async function loadDashboard() {
-    try {
-      const [alertsRes, salesRes] = await Promise.all([
-        fetch(`${API}/expert/inventory-alerts`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`${API}/sales/all?limit=5`, { headers: { 'Authorization': `Bearer ${token}` } })
-      ]);
-
-      if (alertsRes.ok) {
-        const alerts = await alertsRes.json();
-        document.getElementById('statAlertas').textContent = alerts.resumen?.total_alertas_reposicion ?? 0;
-        document.getElementById('statUrgentes').textContent = alerts.resumen?.total_compras_urgentes ?? 0;
-      }
-
-      if (salesRes.ok) {
-        const sales = await salesRes.json();
-        document.getElementById('statVentasRec').textContent = sales.length;
-
-        const wrap = document.getElementById('recentSalesWrap');
-        if (!sales.length) {
-          wrap.innerHTML = '<p class="empty">No hay ventas recientes</p>';
-        } else {
-          wrap.innerHTML = sales.map(s => {
-            const total = parseFloat(s.total || 0);
-            const statusClass = s.status === 'COMPLETADA' ? 'badge-success' : s.status === 'CANCELADA' ? 'badge-danger' : 'badge-warning';
-            return `<div class="sale-item">
-              <div class="sale-info">
-                <span class="sale-id">Venta #${s.id}</span>
-                <span class="badge ${statusClass}">${s.status || 'PENDIENTE'}</span>
-              </div>
-              <span class="sale-total">L ${total.toFixed(2)}</span>
-            </div>`;
-          }).join('');
-        }
-      }
-
-      document.getElementById('lastUpdated').textContent = 'Actualizado: ' + new Date().toLocaleTimeString('es-HN');
-    } catch(e) { console.error('Dashboard error:', e); }
-  }
-
-  document.getElementById('refreshBtn')?.addEventListener('click', loadDashboard);
-  loadDashboard();
-  setInterval(loadDashboard, 30000);
-</script>
-
+<DashboardLayout title="Logs de Auditoría" userRole="ADMIN">
 <style>
-  .mt-4 { margin-top:1.5rem; }
-  .sk-val { display:inline-block; width:60px; height:32px; border-radius:6px; }
-  .quick-links { display:flex; flex-direction:column; gap:0.75rem; }
-  .quick-link { display:flex; align-items:center; gap:1rem; padding:1rem; background:var(--gray-50); border-radius:8px; text-decoration:none; color:var(--navy); border:1.5px solid var(--gray-200); transition:all 0.2s; font-weight:500; }
-  .quick-link:hover { background:var(--blue-ghost); border-color:var(--blue-mid); }
-  .quick-link .icon { font-size:1.5rem; }
-  .recent-sales { display:flex; flex-direction:column; gap:0.75rem; }
-  .sale-item { display:flex; justify-content:space-between; align-items:center; padding:0.75rem; background:var(--gray-50); border-radius:8px; }
-  .sale-info { display:flex; align-items:center; gap:0.5rem; }
-  .sale-id { font-weight:500; font-size:0.875rem; }
-  .sale-total { font-weight:700; color:var(--blue-mid); }
-  .empty { color:var(--gray-400); text-align:center; padding:1.5rem; }
-  .last-updated { font-size:0.72rem; color:var(--gray-400); text-align:right; margin-top:0.5rem; }
+  .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.75rem;flex-wrap:wrap;gap:1rem}
+  .page-title{font-family:var(--font-display);font-size:1.75rem;color:var(--navy)}
+  .filters{display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem}
+  .fi{padding:.5rem .875rem;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:.875rem;font-family:var(--font-body);color:var(--gray-800);background:var(--bg-card)}
+  .fi:focus{outline:none;border-color:var(--blue-mid)}
+  .log-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;background:var(--bg-card);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);font-size:.855rem}
+  thead th{background:var(--navy);color:white;padding:.7rem 1rem;text-align:left;font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+  tbody td{padding:.65rem 1rem;border-bottom:1px solid var(--gray-100);vertical-align:top}
+  tbody tr:hover td{background:var(--gray-50)}
+  .badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:.7rem;font-weight:700;text-transform:uppercase;white-space:nowrap}
+  .b-create{background:#dcfce7;color:#166534}
+  .b-update{background:#dbeafe;color:#1e40af}
+  .b-delete{background:#fee2e2;color:#991b1b}
+  .b-login{background:#f3f4f6;color:#374151}
+  .b-discount{background:#fef9c3;color:#854d0e}
+  .b-other{background:#e0e7ff;color:#3730a3}
+  .det{font-family:monospace;font-size:.75rem;color:var(--gray-500);max-width:220px;word-break:break-all}
+  .load-more{text-align:center;padding:1.5rem 0}
+  .total-badge{background:var(--blue-ghost);color:var(--blue-dark);padding:.3rem .875rem;border-radius:99px;font-size:.82rem;font-weight:600}
 
   /* ══ PAGE-LEVEL DARK MODE + LIQUID GLASS + RESPONSIVE ══════════════════ */
 
@@ -285,3 +213,100 @@ if (!user || (user.role_name !== 'EMPLEADO' && user.role_name !== 'ADMIN')) retu
   }
 
 </style>
+
+<div class="page-header">
+  <h1 class="page-title">🔍 Logs de Auditoría</h1>
+  <div style="display:flex;gap:.75rem;align-items:center">
+    <span class="total-badge" id="totalBadge">—</span>
+    <button class="btn btn-secondary btn-sm" onclick="reload()">🔄 Actualizar</button>
+  </div>
+</div>
+
+<div class="filters">
+  <input type="text" class="fi" id="fAccion" placeholder="Filtrar por acción…" oninput="applyFilter()">
+  <input type="text" class="fi" id="fTabla"  placeholder="Filtrar por tabla…"  oninput="applyFilter()">
+</div>
+
+<div class="log-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Tabla</th><th>Reg.</th><th>Detalle</th>
+      </tr>
+    </thead>
+    <tbody id="logBody"><tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-600)">Cargando…</td></tr></tbody>
+  </table>
+</div>
+<div class="load-more" id="loadMoreArea" style="display:none">
+  <button class="btn btn-secondary" onclick="loadMore()">Cargar más registros</button>
+</div>
+
+<script>
+import { getAuditLogs } from '../services/api.js';
+
+let allLogs = [], skip = 0;
+const LIMIT = 50;
+
+function badgeClass(accion) {
+  if (accion.startsWith('CREATE')) return 'b-create';
+  if (accion.startsWith('UPDATE')) return 'b-update';
+  if (accion.startsWith('DELETE')) return 'b-delete';
+  if (accion.includes('LOGIN'))    return 'b-login';
+  if (accion.includes('DISCOUNT')) return 'b-discount';
+  return 'b-other';
+}
+
+function fmtDate(s) {
+  if (!s) return '—';
+  return new Date(s).toLocaleString('es-HN', { dateStyle:'short', timeStyle:'short' });
+}
+
+function renderRows(logs) {
+  if (!logs.length) return '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-600)">Sin registros</td></tr>';
+  return logs.map(l => `
+    <tr>
+      <td style="color:var(--gray-400)">${l.id}</td>
+      <td style="white-space:nowrap">${fmtDate(l.created_at)}</td>
+      <td><strong>${l.user_nombre || '—'}</strong></td>
+      <td><span class="badge ${badgeClass(l.accion)}">${l.accion}</span></td>
+      <td>${l.tabla || '—'}</td>
+      <td>${l.registro_id || '—'}</td>
+      <td><div class="det">${l.detalle || '—'}</div></td>
+    </tr>`).join('');
+}
+
+function applyFilter() {
+  const fa = document.getElementById('fAccion').value.toLowerCase();
+  const ft = document.getElementById('fTabla').value.toLowerCase();
+  const filtered = allLogs.filter(l =>
+    (!fa || l.accion.toLowerCase().includes(fa)) &&
+    (!ft || (l.tabla||'').toLowerCase().includes(ft))
+  );
+  document.getElementById('logBody').innerHTML = renderRows(filtered);
+}
+
+async function reload() {
+  skip = 0; allLogs = [];
+  document.getElementById('logBody').innerHTML =
+    '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-600)">Cargando…</td></tr>';
+  await loadMore(true);
+}
+
+window.loadMore = async (first=false) => {
+  try {
+    const res = await getAuditLogs({ limit: LIMIT, skip });
+    allLogs = first ? res.logs : [...allLogs, ...res.logs];
+    skip += res.logs.length;
+    document.getElementById('totalBadge').textContent = `${res.total} registros`;
+    applyFilter();
+    document.getElementById('loadMoreArea').style.display = skip < res.total ? 'block' : 'none';
+  } catch(e) {
+    document.getElementById('logBody').innerHTML =
+      `<tr><td colspan="7" style="color:var(--danger);padding:1rem">${e.message}</td></tr>`;
+  }
+};
+
+window.reload = reload;
+reload();
+</script>
+</DashboardLayout>

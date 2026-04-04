@@ -111,19 +111,19 @@ if (!user || (user.role_name !== 'CLIENTE' && user.role_name !== 'ADMIN')) retur
 </script>
 
 <style is:global>
-  .inv-stat-card { background:white; border-radius:var(--radius); padding:1.25rem 1.5rem; border:1px solid var(--gray-200); box-shadow:var(--shadow-sm); }
+  .inv-stat-card { background:var(--bg-card); border-radius:var(--radius); padding:1.25rem 1.5rem; border:1px solid var(--gray-200); box-shadow:var(--shadow-sm); }
   .inv-stat-num { font-size:1.75rem; font-weight:700; font-family:var(--font-display); }
   .inv-stat-lbl { font-size:0.8rem; color:var(--gray-400); margin-top:2px; font-weight:500; }
   .inv-stat-card.blue .inv-stat-num { color:var(--blue-mid); }
   .inv-stat-card.green .inv-stat-num { color:var(--success); font-size:1.4rem; }
   .inv-stat-card.orange .inv-stat-num { color:var(--warning); }
 
-  .loading-wrap,.error-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4rem 2rem; background:white; border-radius:var(--radius); border:1px solid var(--gray-200); text-align:center; }
+  .loading-wrap,.error-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4rem 2rem; background:var(--bg-card); border-radius:var(--radius); border:1px solid var(--gray-200); text-align:center; }
   @keyframes spin { to { transform:rotate(360deg); } }
   .loading-spinner { width:44px; height:44px; border:3px solid var(--gray-200); border-top-color:var(--blue-mid); border-radius:50%; animation:spin 0.8s linear infinite; }
-  .empty-purchases { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:5rem 2rem; text-align:center; background:white; border-radius:var(--radius); border:1px solid var(--gray-200); }
+  .empty-purchases { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:5rem 2rem; text-align:center; background:var(--bg-card); border-radius:var(--radius); border:1px solid var(--gray-200); }
 
-  .table-card { background:white; border-radius:var(--radius); border:1px solid var(--gray-200); box-shadow:var(--shadow-sm); overflow:hidden; }
+  .table-card { background:var(--bg-card); border-radius:var(--radius); border:1px solid var(--gray-200); box-shadow:var(--shadow-sm); overflow:hidden; }
   .table-scroll { overflow-x:auto; }
   .mc-table { width:100%; border-collapse:collapse; }
   .mc-table th { padding:0.75rem 1rem; text-align:left; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-400); font-weight:700; background:var(--gray-50); border-bottom:2px solid var(--gray-200); white-space:nowrap; }
@@ -146,4 +146,189 @@ if (!user || (user.role_name !== 'CLIENTE' && user.role_name !== 'ADMIN')) retur
   .btn-ver:hover { background:var(--blue-mid); color:white; }
   .btn-dl { background:#f0fdf4; color:#166534; border:1px solid rgba(22,101,52,0.2); }
   .btn-dl:hover { background:#166534; color:white; }
+
+  /* ══ PAGE-LEVEL DARK MODE + LIQUID GLASS + RESPONSIVE ══════════════════ */
+
+  /* -- Liquid Glass base (claro y oscuro) -- */
+  .glass-card {
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.55);
+    box-shadow: 0 4px 24px rgba(13,27,46,0.10), inset 0 1px 0 rgba(255,255,255,0.8);
+    border-radius: var(--radius);
+  }
+  html.dark .glass-card {
+    background: rgba(30,41,59,0.55);
+    border-color: rgba(255,255,255,0.08);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  /* -- Stat cards glass -- */
+  html.dark .inv-stat-card,
+  html.dark .stat-card {
+    background: rgba(30,41,59,0.6) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-color: rgba(255,255,255,0.07) !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05) !important;
+  }
+
+  /* -- Table card glass -- */
+  html.dark .inv-table-card,
+  html.dark .card {
+    background: rgba(20,30,50,0.7) !important;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-color: rgba(255,255,255,0.07) !important;
+  }
+  html.dark .inv-table-card { box-shadow: 0 4px 24px rgba(0,0,0,0.4) !important; }
+
+  /* -- Table internals -- */
+  html.dark .inv-table, html.dark table { background: transparent !important; }
+  html.dark .inv-table th, html.dark th {
+    background: rgba(10,15,30,0.6) !important;
+    color: #64748b !important;
+    border-color: rgba(255,255,255,0.06) !important;
+  }
+  html.dark .inv-table td, html.dark td {
+    border-color: rgba(255,255,255,0.05) !important;
+    color: #cbd5e1 !important;
+  }
+  html.dark .inv-table tbody tr:hover td,
+  html.dark tr:hover td { background: rgba(37,99,235,0.08) !important; }
+
+  /* -- Supplier cards glass -- */
+  html.dark .supplier-card {
+    background: rgba(20,30,50,0.65) !important;
+    backdrop-filter: blur(14px);
+    border-color: rgba(255,255,255,0.07) !important;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.3) !important;
+  }
+  html.dark .supplier-card:hover {
+    background: rgba(30,50,80,0.8) !important;
+    border-color: rgba(99,179,237,0.25) !important;
+  }
+
+  /* -- Page modal glass -- */
+  html.dark .page-modal-overlay {
+    background: rgba(5,10,20,0.8) !important;
+    backdrop-filter: blur(8px) !important;
+  }
+  html.dark .page-modal-box {
+    background: rgba(15,23,42,0.92) !important;
+    backdrop-filter: blur(24px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(160%) !important;
+    border: 1px solid rgba(255,255,255,0.09) !important;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06) !important;
+    color: #e2e8f0 !important;
+  }
+  html.dark .page-modal-box .sale-modal-header,
+  html.dark .page-modal-box .modal-close-btn { border-color: rgba(255,255,255,0.07) !important; }
+  html.dark .page-modal-box .sale-modal-title { color: #f1f5f9 !important; }
+  html.dark .page-modal-box .sale-modal-sub   { color: #64748b !important; }
+  html.dark .page-modal-box .modal-close-btn  { background: rgba(255,255,255,0.07) !important; color: #94a3b8 !important; }
+
+  /* -- Forms inside modals & pages -- */
+  html.dark .form-input,
+  html.dark .inv-search,
+  html.dark .adv-input,
+  html.dark .fi,
+  html.dark select,
+  html.dark input[type="text"],
+  html.dark input[type="email"],
+  html.dark input[type="number"],
+  html.dark input[type="password"],
+  html.dark input[type="tel"],
+  html.dark input[type="date"],
+  html.dark textarea {
+    background: rgba(10,15,30,0.6) !important;
+    color: #e2e8f0 !important;
+    border-color: rgba(255,255,255,0.1) !important;
+  }
+  html.dark input::placeholder,
+  html.dark textarea::placeholder { color: #475569 !important; }
+  html.dark input:focus,
+  html.dark textarea:focus,
+  html.dark select:focus {
+    border-color: var(--blue-mid) !important;
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.2) !important;
+  }
+  html.dark select option { background: #0f172a !important; color: #e2e8f0 !important; }
+
+  /* -- Badges dark -- */
+  html.dark .badge-success { background: rgba(22,163,74,0.15) !important; color: #4ade80 !important; border: 1px solid rgba(74,222,128,0.2); }
+  html.dark .badge-warning { background: rgba(217,119,6,0.15) !important;  color: #fcd34d !important; border: 1px solid rgba(252,211,77,0.2); }
+  html.dark .badge-danger  { background: rgba(220,38,38,0.15) !important;  color: #f87171 !important; border: 1px solid rgba(248,113,113,0.2); }
+  html.dark .badge-info    { background: rgba(37,99,235,0.15) !important;  color: #93c5fd !important; border: 1px solid rgba(147,197,253,0.2); }
+
+  /* -- Sale/purchase ID chips -- */
+  html.dark .sale-id { background: rgba(255,255,255,0.06) !important; color: #94a3b8 !important; }
+
+  /* -- State boxes (empty states) -- */
+  html.dark .state-box {
+    background: rgba(20,30,50,0.6) !important;
+    border-color: rgba(255,255,255,0.08) !important;
+    color: #64748b !important;
+  }
+
+  /* -- Action buttons -- */
+  html.dark .action-btn.edit-btn { background: rgba(37,99,235,0.15) !important; }
+  html.dark .action-btn.edit-btn:hover { background: rgba(37,99,235,0.28) !important; }
+  html.dark .action-btn.del-btn  { background: rgba(220,38,38,0.12) !important; }
+  html.dark .action-btn.del-btn:hover  { background: rgba(220,38,38,0.25) !important; }
+
+  /* -- Search bars -- */
+  html.dark .inv-search { background: rgba(10,15,30,0.6) !important; }
+  html.dark .inv-search::placeholder { color: #475569 !important; }
+
+  /* -- Page toolbar bg -- */
+  html.dark .v-toolbar .btn-secondary,
+  html.dark .sort-select,
+  html.dark .adv-toggle-btn {
+    background: rgba(30,41,59,0.7) !important;
+    border-color: rgba(255,255,255,0.1) !important;
+    color: #94a3b8 !important;
+  }
+
+  /* ══ RESPONSIVE — todas las páginas del dashboard ════════════════════════ */
+  @media (max-width: 1024px) {
+    .content-area { padding: 1.25rem !important; }
+    .grid-4 { grid-template-columns: repeat(2,1fr) !important; }
+    .grid-3 { grid-template-columns: repeat(2,1fr) !important; }
+    .quick-grid { grid-template-columns: repeat(4,1fr) !important; }
+    .inv-stats { grid-template-columns: repeat(2,1fr) !important; }
+    .form-grid-2 { grid-template-columns: 1fr 1fr !important; }
+  }
+  @media (max-width: 768px) {
+    .content-area { padding: 1rem !important; }
+    .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr !important; }
+    .quick-grid { grid-template-columns: repeat(3,1fr) !important; }
+    .inv-stats { grid-template-columns: repeat(2,1fr) !important; }
+    .v-toolbar { flex-direction: column !important; align-items: stretch !important; }
+    .inv-search-wrap { max-width: 100% !important; }
+    .form-grid-2 { grid-template-columns: 1fr !important; }
+    .chart-wrap { height: 200px !important; }
+    .page-modal-box { max-width: 100% !important; margin: 0 !important; border-radius: var(--radius) !important; }
+    .top-bar { padding: 0 1rem !important; }
+    .top-bar .page-title { font-size: 1rem !important; }
+    .user-chip-role { display: none !important; }
+  }
+  @media (max-width: 480px) {
+    .content-area { padding: 0.75rem !important; }
+    .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr !important; }
+    .quick-grid { grid-template-columns: repeat(2,1fr) !important; }
+    .inv-stats { grid-template-columns: 1fr 1fr !important; }
+    .inv-stat-card { padding: 0.875rem 1rem !important; }
+    .stat-value { font-size: 1.5rem !important; }
+    .stat-value.stat-sm { font-size: 1.1rem !important; }
+    .card { padding: 1rem !important; }
+    .inv-table td, .inv-table th { padding: 0.5rem 0.625rem !important; font-size: 0.8rem !important; }
+    .sale-id { font-size: 0.7rem !important; }
+    .btn { padding: 0.5rem 0.875rem !important; font-size: 0.8rem !important; }
+    .page-title { font-size: 0.95rem !important; }
+    .dark-toggle { display: none !important; }
+    .top-bar { padding: 0 0.75rem !important; }
+  }
+
 </style>

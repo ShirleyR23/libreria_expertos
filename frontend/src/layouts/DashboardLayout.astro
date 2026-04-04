@@ -60,12 +60,131 @@ catch (e) { return Astro.redirect('/login'); }
       --sidebar-width: 260px;
       --font-display: 'Playfair Display', Georgia, serif;
       --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+      --bg-page: #c8d0df;
+      --bg-card: #ffffff;
+      --text-main: var(--gray-800);
+      --border-color: var(--gray-200);
     }
+
+    /* ── DARK MODE VARIABLES ─────────────────────────────────── */
+    html.dark {
+      --bg-page: #0a0f1e;
+      --bg-card: #1e293b;
+      --text-main: #e2e8f0;
+      --border-color: #334155;
+      --gray-50: #1e293b;
+      --gray-100: #334155;
+      --gray-200: #475569;
+      --gray-400: #94a3b8;
+      --gray-600: #cbd5e1;
+      --gray-800: #f1f5f9;
+      --navy: #e2e8f0;
+      --blue-ghost: #1e3a5f;
+      --blue-pale: #1e3a5f;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+      --shadow: 0 4px 16px rgba(0,0,0,0.4);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,0.6);
+    }
+
+    /* ── DARK MODE: LAYOUT STRUCTURE ────────────────────────── */
+    html.dark .main-content   { background: var(--bg-page) !important; }
+    html.dark .top-bar        { background: #1e293b !important; border-color: #334155 !important; }
+    html.dark .content-area   { background: var(--bg-page) !important; }
+    html.dark .page-title     { color: #e2e8f0 !important; }
+
+    /* ── DARK MODE: CARDS ────────────────────────────────────── */
+    html.dark .card           { background: var(--bg-card) !important; border-color: var(--border-color) !important; color: var(--text-main) !important; }
+    html.dark .card-title     { color: #e2e8f0 !important; }
+    html.dark .card-header    { border-color: #334155 !important; }
+    html.dark .stat-card      { background: var(--bg-card) !important; border-color: var(--border-color) !important; }
+    html.dark .stat-label     { color: #94a3b8 !important; }
+
+    /* ── DARK MODE: INV STAT CARDS (usados en inventario, empleados, etc.) */
+    html.dark .inv-stat-card  { background: var(--bg-card) !important; border-color: var(--border-color) !important; }
+    html.dark .inv-stat-lbl   { color: #94a3b8 !important; }
+
+    /* ── DARK MODE: TABLES ───────────────────────────────────── */
+    html.dark table,
+    html.dark .inv-table      { background: var(--bg-card) !important; }
+    html.dark .inv-table-card { background: var(--bg-card) !important; border-color: var(--border-color) !important; }
+    html.dark th,
+    html.dark .inv-table th   { background: #0f172a !important; color: #94a3b8 !important; border-color: #334155 !important; }
+    html.dark td,
+    html.dark .inv-table td   { border-color: #334155 !important; color: var(--text-main) !important; }
+    html.dark tr:hover td,
+    html.dark .inv-table tbody tr:hover td { background: #263352 !important; }
+    html.dark .inv-table tr:last-child td { border-bottom: none !important; }
+
+    /* ── DARK MODE: FORMS ────────────────────────────────────── */
+    html.dark .form-input     { background: #0f172a !important; color: var(--text-main) !important; border-color: var(--border-color) !important; }
+    html.dark .form-input:focus { border-color: var(--blue-mid) !important; box-shadow: 0 0 0 3px rgba(37,99,235,0.2) !important; }
+    html.dark .inv-search     { background: #0f172a !important; color: var(--text-main) !important; border-color: var(--border-color) !important; }
+    html.dark .inv-search:focus { border-color: var(--blue-mid) !important; }
+    html.dark .form-label     { color: #94a3b8 !important; }
+    html.dark select,
+    html.dark .form-input[type="date"] { background: #0f172a !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+    html.dark option          { background: #1e293b !important; color: #e2e8f0 !important; }
+
+    /* ── DARK MODE: BUTTONS ──────────────────────────────────── */
+    html.dark .btn-secondary  { background: #1e293b !important; color: var(--text-main) !important; border-color: var(--border-color) !important; }
+    html.dark .btn-secondary:hover { background: #334155 !important; }
+    html.dark .action-btn.edit-btn { background: #1e3a5f !important; }
+    html.dark .action-btn.edit-btn:hover { background: #1e4a7f !important; }
+    html.dark .action-btn.del-btn  { background: #1e293b !important; }
+    html.dark .action-btn.del-btn:hover  { background: #334155 !important; }
+
+    /* ── DARK MODE: MODALS (global Modal y modales locales) ──── */
+    html.dark .modal-box      { background: #1e293b !important; border: 1px solid #334155; }
+    html.dark .modal-header   { border-color: #334155 !important; }
+    html.dark .modal-title,
+    html.dark .sale-modal-title { color: #e2e8f0 !important; }
+    html.dark .modal-body     { color: #cbd5e1 !important; }
+    html.dark .modal-footer,
+    html.dark .sale-modal-header { border-color: #334155 !important; }
+    html.dark .modal-close-btn { background: #334155 !important; color: #e2e8f0 !important; }
+    html.dark .modal-close-btn:hover { background: #475569 !important; }
+    html.dark .sale-modal-sub { color: #94a3b8 !important; }
+
+    /* ── DARK MODE: BADGES ───────────────────────────────────── */
+    html.dark .badge-success  { background: #14291f !important; color: #86efac !important; }
+    html.dark .badge-warning  { background: #2d2008 !important; color: #fcd34d !important; }
+    html.dark .badge-danger   { background: #3b1c1c !important; color: #fca5a5 !important; }
+    html.dark .badge-info     { background: #1e3a5f !important; color: #93c5fd !important; }
+
+    /* ── DARK MODE: ALERTS ───────────────────────────────────── */
+    html.dark .alert-error    { background: #3b1c1c; color: #fca5a5; border-color: #7f1d1d; }
+    html.dark .alert-success  { background: #14291f; color: #86efac; border-color: #14532d; }
+
+    /* ── DARK MODE: MISC ─────────────────────────────────────── */
+    html.dark .user-chip      { background: #334155; border-color: #475569; }
+    html.dark .user-chip-name { color: #e2e8f0 !important; }
+    html.dark .user-chip-role { color: #94a3b8 !important; }
+    html.dark .info-key       { color: #94a3b8 !important; }
+    html.dark .info-val       { color: #e2e8f0 !important; }
+    html.dark .info-row       { border-color: #334155 !important; }
+    html.dark .last-updated   { color: #64748b !important; }
+    html.dark .quick-item     { background: #1e293b !important; border-color: #334155 !important; }
+    html.dark .quick-item:hover { background: #1e3a5f !important; border-color: var(--blue-mid) !important; }
+    html.dark .quick-label    { color: #94a3b8 !important; }
+    html.dark .sale-id        { background: #334155 !important; color: #cbd5e1 !important; }
+    html.dark .empty-table-msg { color: #64748b !important; }
+    html.dark .loading-spinner { border-color: #334155 !important; border-top-color: var(--blue-mid) !important; }
+    html.dark .skeleton       { background: linear-gradient(90deg,#1e293b 25%,#334155 50%,#1e293b 75%); background-size:1000px 100%; }
+
+    /* ── DARK TOGGLE BUTTON ──────────────────────────────────── */
+    .dark-toggle { background: none; border: 1.5px solid var(--border-color); border-radius: 99px; padding: .3rem .8rem; cursor: pointer; font-size: .82rem; color: var(--text-main); display:flex;align-items:center;gap:.35rem;transition:all .15s; }
+    .dark-toggle:hover { background: var(--gray-100); }
+
+    /* ── BASE RESET ──────────────────────────────────────────── */
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: var(--font-body); background: #c8d0df; color: var(--gray-800); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+    body { font-family: var(--font-body); background: var(--bg-page); color: var(--text-main); min-height: 100vh; -webkit-font-smoothing: antialiased; transition: background .25s, color .25s; }
 
     .dashboard-container { display: flex; min-height: 100vh; }
     .sidebar { width: var(--sidebar-width); background: var(--navy); position: fixed; height: 100vh; overflow-y: auto; z-index: 100; display: flex; flex-direction: column; }
+
+    /* sidebar siempre oscuro, forzamos colores independiente del tema */
+    html.dark .sidebar { background: #060d1a !important; }
+
     .sidebar-header { padding: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.08); }
     .sidebar-logo { display: flex; align-items: center; gap: 0.6rem; }
     .sidebar-logo-icon { font-size: 1.75rem; }
@@ -85,13 +204,13 @@ catch (e) { return Astro.redirect('/login'); }
     .logout-btn:hover { background: rgba(220,38,38,0.3); color: #fee2e2; }
 
     .main-content { flex: 1; margin-left: var(--sidebar-width); min-height: 100vh; }
-    .top-bar { background: white; padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 12px rgba(13,27,46,0.12); position: sticky; top: 0; z-index: 50; height: 64px; border-bottom: 1px solid var(--gray-200); }
+    .top-bar { background: white; padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 12px rgba(13,27,46,0.12); position: sticky; top: 0; z-index: 50; height: 64px; border-bottom: 1px solid var(--gray-200); transition: background .25s, border-color .25s; }
     .page-title { font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; color: var(--navy); }
-    .user-chip { display: flex; align-items: center; gap: 0.75rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 999px; padding: 0.35rem 1rem 0.35rem 0.5rem; }
+    .user-chip { display: flex; align-items: center; gap: 0.75rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 999px; padding: 0.35rem 1rem 0.35rem 0.5rem; transition: background .25s, border-color .25s; }
     .user-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--blue-mid), var(--blue-dark)); display: flex; align-items: center; justify-content: center; color: white; font-size: 0.8rem; font-weight: 700; }
     .user-chip-name { font-size: 0.875rem; font-weight: 600; color: var(--navy); }
     .user-chip-role { font-size: 0.75rem; color: var(--gray-400); }
-    .content-area { padding: 2rem; background: #c8d0df; min-height: calc(100vh - 64px); }
+    .content-area { padding: 2rem; background: var(--bg-page); min-height: calc(100vh - 64px); transition: background .25s; }
 
     /* BUTTONS */
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.625rem 1.25rem; border: none; border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s; text-decoration: none; white-space: nowrap; }
@@ -106,25 +225,25 @@ catch (e) { return Astro.redirect('/login'); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     /* CARD */
-    .card { background: white; border-radius: var(--radius); box-shadow: 0 4px 20px rgba(13,27,46,0.15), 0 1px 6px rgba(13,27,46,0.08); border: 1px solid rgba(13,27,46,0.06); padding: 1.5rem; }
-    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid var(--gray-100); }
+    .card { background: var(--bg-card); border-radius: var(--radius); box-shadow: 0 4px 20px rgba(13,27,46,0.15), 0 1px 6px rgba(13,27,46,0.08); border: 1px solid var(--border-color); padding: 1.5rem; transition: background .25s, border-color .25s; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
     .card-title { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; color: var(--navy); }
 
     /* STAT CARD */
-    .stat-card { background: white; border-radius: var(--radius); padding: 1.5rem; box-shadow: 0 4px 20px rgba(13,27,46,0.15), 0 1px 6px rgba(13,27,46,0.08); border: 1px solid rgba(13,27,46,0.06); }
+    .stat-card { background: var(--bg-card); border-radius: var(--radius); padding: 1.5rem; box-shadow: 0 4px 20px rgba(13,27,46,0.15), 0 1px 6px rgba(13,27,46,0.08); border: 1px solid var(--border-color); transition: background .25s, border-color .25s; }
     .stat-value { font-family: var(--font-display); font-size: 2rem; font-weight: 700; color: var(--blue-mid); }
     .stat-label { color: var(--gray-400); font-size: 0.875rem; margin-top: 0.25rem; }
 
     /* FORM */
     .form-group { margin-bottom: 1.25rem; }
     .form-label { display: block; margin-bottom: 0.4rem; font-size: 0.8rem; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.04em; }
-    .form-input { width: 100%; padding: 0.75rem 1rem; border: 2px solid var(--gray-200); border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 0.95rem; color: var(--gray-800); background: white; transition: all 0.2s; }
+    .form-input { width: 100%; padding: 0.75rem 1rem; border: 2px solid var(--border-color); border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 0.95rem; color: var(--text-main); background: var(--bg-card); transition: all 0.2s; }
     .form-input:focus { outline: none; border-color: var(--blue-mid); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
 
     /* TABLE */
     .table-container { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--gray-100); }
+    table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
+    th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border-color); }
     th { font-weight: 600; color: var(--gray-400); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; background: var(--gray-50); }
     tr:hover td { background: var(--gray-50); }
 
@@ -143,22 +262,22 @@ catch (e) { return Astro.redirect('/login'); }
     @media (max-width: 1024px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 768px) { .sidebar { transform: translateX(-100%); } .main-content { margin-left: 0; } .grid-4,.grid-3,.grid-2 { grid-template-columns: 1fr; } }
 
-    /* MODAL SYSTEM */
+    /* MODAL SYSTEM (global) */
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     @keyframes slideUp { from { opacity: 0; transform: translateY(16px) scale(0.97); } to { opacity: 1; transform: none; } }
     #modalOverlay { position: fixed; inset: 0; background: rgba(13,27,46,0.65); backdrop-filter: blur(4px); z-index: 9999; display: none; align-items: center; justify-content: center; padding: 1rem; }
     #modalOverlay.show { display: flex; }
-    .modal-box { background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 100%; max-width: 440px; overflow: hidden; animation: slideUp 0.25s ease; }
-    .modal-box.modal-lg { max-width: 640px; }
-    .modal-header { padding: 1.5rem 1.75rem 1rem; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; gap: 1rem; }
+    #modalOverlay .modal-box { background: var(--bg-card); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 100%; max-width: 440px; overflow: hidden; animation: slideUp 0.25s ease; border: 1px solid var(--border-color); }
+    #modalOverlay .modal-box.modal-lg { max-width: 640px; }
+    #modalOverlay .modal-header { padding: 1.5rem 1.75rem 1rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 1rem; }
     .modal-icon { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; }
     .modal-icon.success { background: #dcfce7; }
     .modal-icon.error { background: #fee2e2; }
     .modal-icon.warning { background: #fef3c7; }
     .modal-icon.info { background: var(--blue-pale); }
-    .modal-title { font-family: var(--font-display); font-size: 1.2rem; font-weight: 600; color: var(--navy); }
-    .modal-body { padding: 1rem 1.75rem; color: var(--gray-600); line-height: 1.6; }
-    .modal-footer { padding: 1rem 1.75rem 1.5rem; display: flex; justify-content: flex-end; gap: 0.75rem; }
+    #modalOverlay .modal-title { font-family: var(--font-display); font-size: 1.2rem; font-weight: 600; color: var(--navy); }
+    #modalOverlay .modal-body { padding: 1rem 1.75rem; color: var(--gray-600); line-height: 1.6; }
+    #modalOverlay .modal-footer { padding: 1rem 1.75rem 1.5rem; display: flex; justify-content: flex-end; gap: 0.75rem; }
 
     /* SKELETON */
     @keyframes shimmer { 0% { background-position: -500px 0; } 100% { background-position: 500px 0; } }
@@ -171,11 +290,14 @@ catch (e) { return Astro.redirect('/login'); }
     <main class="main-content">
       <div class="top-bar">
         <h1 class="page-title">{title}</h1>
-        <div class="user-chip">
-          <div class="user-avatar">{(user?.nombre || 'U').charAt(0).toUpperCase()}</div>
-          <div>
-            <div class="user-chip-name">{user?.nombre || 'Usuario'}</div>
-            <div class="user-chip-role">{userRole}</div>
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <button class="dark-toggle" id="darkToggleBtn" onclick="window.toggleDark()" title="Cambiar tema">🌙 Oscuro</button>
+          <div class="user-chip">
+            <div class="user-avatar">{(user?.nombre || 'U').charAt(0).toUpperCase()}</div>
+            <div>
+              <div class="user-chip-name">{user?.nombre || 'Usuario'}</div>
+              <div class="user-chip-role">{userRole}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -244,45 +366,106 @@ catch (e) { return Astro.redirect('/login'); }
   </script>
 
   <!-- SESSION GUARD: auto-logout por inactividad + back/forward cache -->
-  <script type="module">
-    import { initSessionGuard } from '../utils/session-guard.js';
-    initSessionGuard();
+  <script is:inline>
+    (function() {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const INACTIVITY_MS = 30 * 60 * 1000;
+      const WARNING_MS    = 2  * 60 * 1000;
+      let _inactivityTimer = null, _warningTimer = null;
+      let _warningEl = null, _countdownInterval = null;
+
+      function _doLogout(reason) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        document.cookie = 'token=; Max-Age=0; path=/';
+        document.cookie = 'user=; Max-Age=0; path=/';
+        window.location.href = '/login?expired=1&reason=' + (reason || 'inactividad');
+      }
+
+      function _hideWarning() {
+        if (_warningEl) { _warningEl.remove(); _warningEl = null; }
+        if (_countdownInterval) { clearInterval(_countdownInterval); _countdownInterval = null; }
+      }
+
+      function _showWarning() {
+        if (_warningEl) return;
+        _warningEl = document.createElement('div');
+        _warningEl.id = 'session-warning';
+        _warningEl.innerHTML = '<div style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:99999;background:#1e3a5f;color:white;padding:1rem 1.25rem;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.35);max-width:320px;font-size:0.875rem;line-height:1.5;border:1.5px solid #3b82f6"><div style="font-weight:700;margin-bottom:0.35rem">⏱️ Sesión por expirar</div><div>Tu sesión cerrará en <strong id=\"sg-countdown\"></strong> por inactividad.</div><div style="margin-top:0.75rem;display:flex;gap:0.5rem"><button id=\"sg-stay\" style="flex:1;background:#2563eb;color:white;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:600;font-size:0.8rem">Continuar sesión</button><button id=\"sg-logout\" style="flex:1;background:transparent;color:#93c5fd;border:1.5px solid #3b82f6;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:600;font-size:0.8rem">Cerrar sesión</button></div></div>';
+        document.body.appendChild(_warningEl);
+        document.getElementById('sg-stay')?.addEventListener('click', _resetTimers);
+        document.getElementById('sg-logout')?.addEventListener('click', function(){ _doLogout('manual'); });
+        var secondsLeft = 120;
+        var el = document.getElementById('sg-countdown');
+        var tick = function() {
+          if (el) el.textContent = secondsLeft > 60 ? Math.ceil(secondsLeft/60) + ' min' : secondsLeft + 's';
+          secondsLeft--;
+        };
+        tick();
+        _countdownInterval = setInterval(tick, 1000);
+      }
+
+      function _resetTimers() {
+        _hideWarning();
+        clearTimeout(_inactivityTimer);
+        clearTimeout(_warningTimer);
+        _warningTimer     = setTimeout(_showWarning, INACTIVITY_MS - WARNING_MS);
+        _inactivityTimer  = setTimeout(function(){ _doLogout('inactividad'); }, INACTIVITY_MS);
+      }
+
+      ['mousemove','mousedown','keypress','touchstart','scroll','click'].forEach(function(ev) {
+        window.addEventListener(ev, _resetTimers, { passive: true });
+      });
+
+      window.addEventListener('storage', function(e) {
+        if (e.key === 'token' && !e.newValue) {
+          window.location.href = '/login?expired=1&reason=otra_pestana';
+        }
+      });
+
+      _resetTimers();
+    })();
   </script>
 
   <script is:inline>
     // ── Bloquear acceso por caché del navegador (botones atrás/adelante) ──
-    // Se ejecuta INMEDIATAMENTE antes de que la página sea visible
     (function blockCachedAccess() {
       function checkSession() {
         const token = localStorage.getItem('token');
         if (!token) {
-          // No hay sesión — redirigir sin dejar esta página en el historial
           window.location.replace('/login?expired=1&reason=no_sesion');
         }
       }
-
-      // 1. Verificar al cargar
       checkSession();
-
-      // 2. pageshow se dispara cuando la página se restaura desde bfcache
-      //    (esto es lo que pasa con el botón "atrás" en Chrome/Firefox/Safari)
       window.addEventListener('pageshow', function(event) {
-        // event.persisted = true significa que viene del back-forward cache
-        if (event.persisted) {
-          checkSession();
-        }
+        if (event.persisted) { checkSession(); }
       });
-
-      // 3. visibilitychange: cuando el usuario vuelve a la pestaña
       document.addEventListener('visibilitychange', function() {
-        if (document.visibilityState === 'visible') {
-          checkSession();
-        }
+        if (document.visibilityState === 'visible') { checkSession(); }
       });
-
-      // 4. focus: cuando la ventana recupera el foco
       window.addEventListener('focus', checkSession);
     })();
+  </script>
+  <script is:inline>
+    /* Dark mode — apply before paint */
+    (function(){
+      const saved = localStorage.getItem('darkMode');
+      const pref  = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const on    = saved === 'true' || (saved === null && pref);
+      if (on) document.documentElement.classList.add('dark');
+    })();
+    window.toggleDark = function() {
+      const on = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('darkMode', on);
+      const btn = document.getElementById('darkToggleBtn');
+      if (btn) btn.innerHTML = on ? '☀️ Claro' : '🌙 Oscuro';
+    };
+    document.addEventListener('DOMContentLoaded', function(){
+      const btn = document.getElementById('darkToggleBtn');
+      if (btn && document.documentElement.classList.contains('dark')) btn.innerHTML = '☀️ Claro';
+    });
   </script>
 </body>
 </html>

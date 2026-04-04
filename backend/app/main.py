@@ -24,6 +24,11 @@ from app.api import (
     admin_router,
     expert_router,
     suppliers_router,
+    reviews_router,   # ← NUEVO
+    reports_router,   # ← NUEVO
+    audit_router,     # ← NUEVO
+    isbn_router,      # ← NUEVO
+    charts_router,    # ← NUEVO
 )
 
 settings = get_settings()
@@ -166,6 +171,11 @@ app.include_router(purchases_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(expert_router, prefix="/api/v1")
 app.include_router(suppliers_router, prefix="/api/v1")
+app.include_router(reviews_router, prefix="/api/v1")   # ← NUEVO
+app.include_router(reports_router, prefix="/api/v1")   # ← NUEVO
+app.include_router(audit_router,   prefix="/api/v1")   # ← NUEVO
+app.include_router(isbn_router,    prefix="/api/v1")   # ← NUEVO
+app.include_router(charts_router,  prefix="/api/v1")   # ← NUEVO
 
 
 @app.get("/")

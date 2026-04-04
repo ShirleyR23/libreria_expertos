@@ -1,12 +1,13 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-
 const userStr = Astro.cookies.get('user')?.value;
 let user = null;
 try { user = userStr ? JSON.parse(userStr) : null; } catch (e) {}
 if (!user || user.role_name !== 'ADMIN') return Astro.redirect('/login');
 ---
 <DashboardLayout title="Dashboard" userRole="ADMIN">
+
+  <!-- STAT CARDS -->
   <div class="dash-stats grid grid-4">
     <div class="stat-card stat-blue">
       <div class="stat-icon-wrap">📚</div>
@@ -30,23 +31,57 @@ if (!user || user.role_name !== 'ADMIN') return Astro.redirect('/login');
     </div>
   </div>
 
+  <!-- CHARTS ROW -->
   <div class="grid grid-2" style="margin-top:1.5rem">
+
+    <!-- Ventas por mes -->
+    <div class="card chart-card">
+      <div class="card-header">
+        <h2 class="card-title">📊 Ventas por mes</h2>
+        <select id="monthsSelect" class="btn btn-secondary btn-sm" style="padding:.35rem .75rem;cursor:pointer">
+          <option value="6">Últimos 6 meses</option>
+          <option value="12">Últimos 12 meses</option>
+          <option value="24">Últimos 24 meses</option>
+        </select>
+      </div>
+      <div class="chart-wrap"><canvas id="salesChart"></canvas></div>
+    </div>
+
+    <!-- Top 5 libros -->
+    <div class="card chart-card">
+      <div class="card-header">
+        <h2 class="card-title">🏆 Libros más vendidos</h2>
+      </div>
+      <div class="chart-wrap"><canvas id="booksChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- LOWER ROW -->
+  <div class="grid grid-2" style="margin-top:1.5rem">
+
+    <!-- Accesos rápidos -->
     <div class="card">
       <div class="card-header"><h2 class="card-title">Accesos rápidos</h2></div>
       <div class="quick-grid">
-        <a href="/inventario" class="quick-item"><span class="quick-icon">📚</span><span class="quick-label">Inventario</span></a>
-        <a href="/ventas" class="quick-item"><span class="quick-icon">💰</span><span class="quick-label">Ventas</span></a>
-        <a href="/compras" class="quick-item"><span class="quick-icon">📦</span><span class="quick-label">Compras</span></a>
-        <a href="/empleados" class="quick-item"><span class="quick-icon">👥</span><span class="quick-label">Empleados</span></a>
+        <a href="/inventario"      class="quick-item"><span class="quick-icon">📚</span><span class="quick-label">Inventario</span></a>
+        <a href="/ventas"          class="quick-item"><span class="quick-icon">💰</span><span class="quick-label">Ventas</span></a>
+        <a href="/compras"         class="quick-item"><span class="quick-icon">📦</span><span class="quick-label">Compras</span></a>
+        <a href="/empleados"       class="quick-item"><span class="quick-icon">👥</span><span class="quick-label">Empleados</span></a>
+        <a href="/proveedores"     class="quick-item"><span class="quick-icon">🏭</span><span class="quick-label">Proveedores</span></a>
         <a href="/sistema-experto" class="quick-item"><span class="quick-icon">🤖</span><span class="quick-label">Sistema Experto</span></a>
-        <a href="/catalogo-admin" class="quick-item"><span class="quick-icon">🏪</span><span class="quick-label">Ver Catálogo</span></a>
+        <a href="/auditoria"       class="quick-item"><span class="quick-icon">🔍</span><span class="quick-label">Auditoría</span></a>
+        <a href="/catalogo-admin"  class="quick-item"><span class="quick-icon">🏪</span><span class="quick-label">Ver Catálogo</span></a>
       </div>
     </div>
 
+    <!-- Resumen del sistema -->
     <div class="card">
       <div class="card-header">
         <h2 class="card-title">Resumen del sistema</h2>
-        <button id="refreshBtn" class="btn btn-secondary btn-sm">🔄 Actualizar</button>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <button id="exportSalesBtn" class="btn btn-secondary btn-sm">📥 Exportar ventas</button>
+          <button id="refreshBtn" class="btn btn-secondary btn-sm">🔄 Actualizar</button>
+        </div>
       </div>
       <div class="info-list">
         <div class="info-row"><span class="info-key">👥 Clientes registrados</span><strong class="info-val" id="infoClientes">—</strong></div>
@@ -60,46 +95,183 @@ if (!user || user.role_name !== 'ADMIN') return Astro.redirect('/login');
   </div>
 </DashboardLayout>
 
+<!-- Chart.js desde CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" is:inline></script>
+
 <script is:inline>
-  const API = 'http://localhost:8000/api/v1';
-  const token = localStorage.getItem('token');
+const API   = (window.PUBLIC_API_URL || 'http://localhost:8000/api/v1');
+const token = localStorage.getItem('token');
+const hdr   = { Authorization: `Bearer ${token}` };
 
-  async function loadStats() {
-    try {
-      const r = await fetch(`${API}/admin/dashboard-stats`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (!r.ok) return;
-      const s = await r.json();
-      document.getElementById('statLibros').textContent = s.total_libros ?? 0;
-      document.getElementById('statStock').textContent = s.stock_bajo ?? 0;
-      document.getElementById('statVentas').textContent = s.total_ventas ?? 0;
-      document.getElementById('statIngresos').textContent = 'L ' + Number(s.ingresos_totales ?? 0).toFixed(2);
-      document.getElementById('infoClientes').textContent = s.total_clientes ?? 0;
-      document.getElementById('infoEmpleados').textContent = s.total_empleados ?? 0;
-      document.getElementById('infoVentas2').textContent = s.total_ventas ?? 0;
-      document.getElementById('infoIngresos2').textContent = 'L ' + Number(s.ingresos_totales ?? 0).toFixed(2);
-      document.getElementById('infoStock2').textContent = s.stock_bajo ?? 0;
-      document.getElementById('lastUpdated').textContent = 'Actualizado: ' + new Date().toLocaleTimeString('es-HN');
-    } catch(e) { console.error('Stats error:', e); }
-  }
+let salesChartInst = null;
+let booksChartInst = null;
 
-  document.getElementById('refreshBtn')?.addEventListener('click', loadStats);
+// ── paleta que funciona en dark y light ──────────────────────────────────────
+const isDark  = () => document.documentElement.classList.contains('dark');
+const txtColor = () => isDark() ? '#cbd5e1' : '#475569';
+const gridClr  = () => isDark() ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+
+// ── estadísticas ─────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const r = await fetch(`${API}/admin/dashboard-stats`, { headers: hdr });
+    if (!r.ok) return;
+    const s = await r.json();
+    document.getElementById('statLibros').textContent   = s.total_libros   ?? 0;
+    document.getElementById('statStock').textContent    = s.stock_bajo      ?? 0;
+    document.getElementById('statVentas').textContent   = s.total_ventas    ?? 0;
+    document.getElementById('statIngresos').textContent = 'L ' + Number(s.ingresos_totales ?? 0).toFixed(2);
+    document.getElementById('infoClientes').textContent  = s.total_clientes  ?? 0;
+    document.getElementById('infoEmpleados').textContent = s.total_empleados ?? 0;
+    document.getElementById('infoVentas2').textContent   = s.total_ventas    ?? 0;
+    document.getElementById('infoIngresos2').textContent = 'L ' + Number(s.ingresos_totales ?? 0).toFixed(2);
+    document.getElementById('infoStock2').textContent    = s.stock_bajo      ?? 0;
+    document.getElementById('lastUpdated').textContent   = 'Actualizado: ' + new Date().toLocaleTimeString('es-HN');
+  } catch(e) { console.error('Stats error:', e); }
+}
+
+// ── gráficas ─────────────────────────────────────────────────────────────────
+async function loadCharts(months) {
+  try {
+    const r = await fetch(`${API}/admin/sales-by-month?months=${months}`, { headers: hdr });
+    if (!r.ok) return;
+    const data = await r.json();
+
+    // ── VENTAS POR MES ──────────────────────────────────────────────────────
+    const labels    = data.por_mes.map(d => d.mes);
+    const ventasArr = data.por_mes.map(d => d.ventas);
+    const ingresArr = data.por_mes.map(d => d.ingresos);
+
+    if (salesChartInst) salesChartInst.destroy();
+    const ctx1 = document.getElementById('salesChart').getContext('2d');
+    salesChartInst = new Chart(ctx1, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Ventas',
+            data: ventasArr,
+            backgroundColor: 'rgba(37,99,235,0.75)',
+            borderColor: 'rgba(37,99,235,1)',
+            borderWidth: 1,
+            yAxisID: 'y',
+            order: 2,
+          },
+          {
+            label: 'Ingresos (L)',
+            data: ingresArr,
+            type: 'line',
+            borderColor: 'rgba(22,163,74,1)',
+            backgroundColor: 'rgba(22,163,74,0.12)',
+            pointBackgroundColor: 'rgba(22,163,74,1)',
+            tension: 0.35,
+            fill: true,
+            yAxisID: 'y1',
+            order: 1,
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: txtColor(), font: { size: 12 } } },
+          tooltip: {
+            callbacks: {
+              label: ctx => ctx.dataset.label === 'Ingresos (L)'
+                ? `${ctx.dataset.label}: L${Number(ctx.raw).toFixed(2)}`
+                : `${ctx.dataset.label}: ${ctx.raw}`
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { color: txtColor() }, grid: { color: gridClr() } },
+          y:  { position: 'left',  ticks: { color: '#2563eb' }, grid: { color: gridClr() },
+                title: { display: true, text: 'Ventas', color: '#2563eb' } },
+          y1: { position: 'right', ticks: { color: '#16a34a', callback: v => 'L' + v.toFixed(0) },
+                grid: { drawOnChartArea: false },
+                title: { display: true, text: 'Ingresos', color: '#16a34a' } },
+        }
+      }
+    });
+
+    // ── TOP LIBROS ──────────────────────────────────────────────────────────
+    const bookLabels = data.top_libros.map(b =>
+      b.nombre.length > 22 ? b.nombre.substring(0, 22) + '…' : b.nombre
+    );
+    const bookVals = data.top_libros.map(b => b.vendidos);
+    const colors = ['rgba(37,99,235,.8)','rgba(22,163,74,.8)','rgba(217,119,6,.8)',
+                    'rgba(124,58,237,.8)','rgba(220,38,38,.8)'];
+
+    if (booksChartInst) booksChartInst.destroy();
+    const ctx2 = document.getElementById('booksChart').getContext('2d');
+    booksChartInst = new Chart(ctx2, {
+      type: 'doughnut',
+      data: {
+        labels: bookLabels,
+        datasets: [{ data: bookVals, backgroundColor: colors, borderWidth: 2,
+                     borderColor: isDark() ? '#1e293b' : '#fff' }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: txtColor(), font: { size: 11 }, padding: 12, boxWidth: 14 }
+          },
+          tooltip: {
+            callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} vendidos` }
+          }
+        }
+      }
+    });
+
+  } catch(e) { console.error('Charts error:', e); }
+}
+
+// ── wiring ────────────────────────────────────────────────────────────────────
+document.getElementById('monthsSelect').addEventListener('change', e => {
+  loadCharts(parseInt(e.target.value));
+});
+
+document.getElementById('refreshBtn').addEventListener('click', () => {
   loadStats();
-  setInterval(loadStats, 30000);
+  loadCharts(parseInt(document.getElementById('monthsSelect').value));
+});
+
+document.getElementById('exportSalesBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('exportSalesBtn');
+  btn.disabled = true; btn.textContent = '⏳ Generando…';
+  try {
+    const r = await fetch(`${API}/reports/sales/export`, { headers: hdr });
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'ventas.csv'; a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) { alert('Error al exportar: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = '📥 Exportar ventas'; }
+});
+
+loadStats();
+loadCharts(6);
+setInterval(loadStats, 30000);
 </script>
 
 <style>
-  .dash-stats .stat-card { display:flex; flex-direction:column; gap:0.5rem; padding:1.5rem; position:relative; overflow:hidden; }
-  .stat-blue { border-top:3px solid var(--blue-mid); } .stat-blue .stat-value { color:var(--blue-mid); }
-  .stat-orange { border-top:3px solid var(--warning); } .stat-orange .stat-value { color:var(--warning); }
-  .stat-green { border-top:3px solid var(--success); } .stat-green .stat-value { color:var(--success); }
-  .stat-purple { border-top:3px solid #7c3aed; } .stat-purple .stat-value { color:#7c3aed; }
+  .dash-stats .stat-card { display:flex; flex-direction:column; gap:.5rem; padding:1.5rem; position:relative; overflow:hidden; }
+  .stat-blue   { border-top:3px solid var(--blue-mid); }   .stat-blue   .stat-value { color:var(--blue-mid); }
+  .stat-orange { border-top:3px solid var(--warning); }    .stat-orange .stat-value { color:var(--warning); }
+  .stat-green  { border-top:3px solid var(--success); }    .stat-green  .stat-value { color:var(--success); }
+  .stat-purple { border-top:3px solid #7c3aed; }           .stat-purple .stat-value { color:#7c3aed; }
   .stat-icon-wrap { font-size:1.5rem; }
   .stat-value { font-family:var(--font-display); font-size:2rem; font-weight:700; min-height:2.4rem; }
   .stat-value.stat-sm { font-size:1.5rem; }
-  .stat-label { font-size:0.85rem; color:var(--gray-400); font-weight:500; }
+  .stat-label { font-size:.85rem; color:var(--gray-400); font-weight:500; }
   .sk-val { display:inline-block; width:60px; height:32px; border-radius:6px; }
-  .quick-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:0.75rem; }
-  .quick-item { display:flex; flex-direction:column; align-items:center; gap:0.5rem; padding:1rem; background:var(--gray-50); border-radius:var(--radius-sm); text-decoration:none; border:1.5px solid var(--gray-200); transition:all 0.2s; }
+  .chart-card .card-header { display:flex; align-items:center; justify-content:space-between; }
+  .chart-wrap { position:relative; height:260px; padding:.5rem 0; }
+  .quick-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:0.75rem; }
+  .quick-item { display:flex; flex-direction:column; align-items:center; gap:0.5rem; padding:1rem 0.5rem; background:var(--gray-50); border-radius:var(--radius-sm); text-decoration:none; border:1.5px solid var(--gray-200); transition:all 0.2s; }
   .quick-item:hover { border-color:var(--blue-mid); background:var(--blue-ghost); transform:translateY(-2px); }
   .quick-icon { font-size:1.5rem; }
   .quick-label { font-size:0.78rem; font-weight:600; color:var(--gray-600); text-align:center; }
@@ -108,5 +280,196 @@ if (!user || user.role_name !== 'ADMIN') return Astro.redirect('/login');
   .info-row:last-child { border-bottom:none; }
   .info-key { font-size:0.875rem; color:var(--gray-600); }
   .info-val { font-size:0.95rem; color:var(--navy); }
-  .last-updated { font-size:0.72rem; color:var(--gray-400); text-align:right; margin-top:0.5rem; }
+  .last-updated { font-size:0.78rem; color:var(--gray-400); margin-top:0.75rem; }
+  html.dark .quick-item { background:var(--gray-100); border-color:var(--border-color); }
+  html.dark .quick-item:hover { background:var(--blue-ghost); border-color:var(--blue-mid); }
+  html.dark .quick-label { color:var(--gray-600); }
+  html.dark .info-row { border-color:var(--border-color); }
+  html.dark .info-key { color:var(--gray-600); }
+  html.dark .info-val { color:var(--navy); }
+
+  /* ══ PAGE-LEVEL DARK MODE + LIQUID GLASS + RESPONSIVE ══════════════════ */
+
+  /* -- Liquid Glass base (claro y oscuro) -- */
+  .glass-card {
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.55);
+    box-shadow: 0 4px 24px rgba(13,27,46,0.10), inset 0 1px 0 rgba(255,255,255,0.8);
+    border-radius: var(--radius);
+  }
+  html.dark .glass-card {
+    background: rgba(30,41,59,0.55);
+    border-color: rgba(255,255,255,0.08);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  /* -- Stat cards glass -- */
+  html.dark .inv-stat-card,
+  html.dark .stat-card {
+    background: rgba(30,41,59,0.6) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-color: rgba(255,255,255,0.07) !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05) !important;
+  }
+
+  /* -- Table card glass -- */
+  html.dark .inv-table-card,
+  html.dark .card {
+    background: rgba(20,30,50,0.7) !important;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-color: rgba(255,255,255,0.07) !important;
+  }
+  html.dark .inv-table-card { box-shadow: 0 4px 24px rgba(0,0,0,0.4) !important; }
+
+  /* -- Table internals -- */
+  html.dark .inv-table, html.dark table { background: transparent !important; }
+  html.dark .inv-table th, html.dark th {
+    background: rgba(10,15,30,0.6) !important;
+    color: #64748b !important;
+    border-color: rgba(255,255,255,0.06) !important;
+  }
+  html.dark .inv-table td, html.dark td {
+    border-color: rgba(255,255,255,0.05) !important;
+    color: #cbd5e1 !important;
+  }
+  html.dark .inv-table tbody tr:hover td,
+  html.dark tr:hover td { background: rgba(37,99,235,0.08) !important; }
+
+  /* -- Supplier cards glass -- */
+  html.dark .supplier-card {
+    background: rgba(20,30,50,0.65) !important;
+    backdrop-filter: blur(14px);
+    border-color: rgba(255,255,255,0.07) !important;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.3) !important;
+  }
+  html.dark .supplier-card:hover {
+    background: rgba(30,50,80,0.8) !important;
+    border-color: rgba(99,179,237,0.25) !important;
+  }
+
+  /* -- Page modal glass -- */
+  html.dark .page-modal-overlay {
+    background: rgba(5,10,20,0.8) !important;
+    backdrop-filter: blur(8px) !important;
+  }
+  html.dark .page-modal-box {
+    background: rgba(15,23,42,0.92) !important;
+    backdrop-filter: blur(24px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(160%) !important;
+    border: 1px solid rgba(255,255,255,0.09) !important;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06) !important;
+    color: #e2e8f0 !important;
+  }
+  html.dark .page-modal-box .sale-modal-header,
+  html.dark .page-modal-box .modal-close-btn { border-color: rgba(255,255,255,0.07) !important; }
+  html.dark .page-modal-box .sale-modal-title { color: #f1f5f9 !important; }
+  html.dark .page-modal-box .sale-modal-sub   { color: #64748b !important; }
+  html.dark .page-modal-box .modal-close-btn  { background: rgba(255,255,255,0.07) !important; color: #94a3b8 !important; }
+
+  /* -- Forms inside modals & pages -- */
+  html.dark .form-input,
+  html.dark .inv-search,
+  html.dark .adv-input,
+  html.dark .fi,
+  html.dark select,
+  html.dark input[type="text"],
+  html.dark input[type="email"],
+  html.dark input[type="number"],
+  html.dark input[type="password"],
+  html.dark input[type="tel"],
+  html.dark input[type="date"],
+  html.dark textarea {
+    background: rgba(10,15,30,0.6) !important;
+    color: #e2e8f0 !important;
+    border-color: rgba(255,255,255,0.1) !important;
+  }
+  html.dark input::placeholder,
+  html.dark textarea::placeholder { color: #475569 !important; }
+  html.dark input:focus,
+  html.dark textarea:focus,
+  html.dark select:focus {
+    border-color: var(--blue-mid) !important;
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.2) !important;
+  }
+  html.dark select option { background: #0f172a !important; color: #e2e8f0 !important; }
+
+  /* -- Badges dark -- */
+  html.dark .badge-success { background: rgba(22,163,74,0.15) !important; color: #4ade80 !important; border: 1px solid rgba(74,222,128,0.2); }
+  html.dark .badge-warning { background: rgba(217,119,6,0.15) !important;  color: #fcd34d !important; border: 1px solid rgba(252,211,77,0.2); }
+  html.dark .badge-danger  { background: rgba(220,38,38,0.15) !important;  color: #f87171 !important; border: 1px solid rgba(248,113,113,0.2); }
+  html.dark .badge-info    { background: rgba(37,99,235,0.15) !important;  color: #93c5fd !important; border: 1px solid rgba(147,197,253,0.2); }
+
+  /* -- Sale/purchase ID chips -- */
+  html.dark .sale-id { background: rgba(255,255,255,0.06) !important; color: #94a3b8 !important; }
+
+  /* -- State boxes (empty states) -- */
+  html.dark .state-box {
+    background: rgba(20,30,50,0.6) !important;
+    border-color: rgba(255,255,255,0.08) !important;
+    color: #64748b !important;
+  }
+
+  /* -- Action buttons -- */
+  html.dark .action-btn.edit-btn { background: rgba(37,99,235,0.15) !important; }
+  html.dark .action-btn.edit-btn:hover { background: rgba(37,99,235,0.28) !important; }
+  html.dark .action-btn.del-btn  { background: rgba(220,38,38,0.12) !important; }
+  html.dark .action-btn.del-btn:hover  { background: rgba(220,38,38,0.25) !important; }
+
+  /* -- Search bars -- */
+  html.dark .inv-search { background: rgba(10,15,30,0.6) !important; }
+  html.dark .inv-search::placeholder { color: #475569 !important; }
+
+  /* -- Page toolbar bg -- */
+  html.dark .v-toolbar .btn-secondary,
+  html.dark .sort-select,
+  html.dark .adv-toggle-btn {
+    background: rgba(30,41,59,0.7) !important;
+    border-color: rgba(255,255,255,0.1) !important;
+    color: #94a3b8 !important;
+  }
+
+  /* ══ RESPONSIVE — todas las páginas del dashboard ════════════════════════ */
+  @media (max-width: 1024px) {
+    .content-area { padding: 1.25rem !important; }
+    .grid-4 { grid-template-columns: repeat(2,1fr) !important; }
+    .grid-3 { grid-template-columns: repeat(2,1fr) !important; }
+    .quick-grid { grid-template-columns: repeat(4,1fr) !important; }
+    .inv-stats { grid-template-columns: repeat(2,1fr) !important; }
+    .form-grid-2 { grid-template-columns: 1fr 1fr !important; }
+  }
+  @media (max-width: 768px) {
+    .content-area { padding: 1rem !important; }
+    .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr !important; }
+    .quick-grid { grid-template-columns: repeat(3,1fr) !important; }
+    .inv-stats { grid-template-columns: repeat(2,1fr) !important; }
+    .v-toolbar { flex-direction: column !important; align-items: stretch !important; }
+    .inv-search-wrap { max-width: 100% !important; }
+    .form-grid-2 { grid-template-columns: 1fr !important; }
+    .chart-wrap { height: 200px !important; }
+    .page-modal-box { max-width: 100% !important; margin: 0 !important; border-radius: var(--radius) !important; }
+    .top-bar { padding: 0 1rem !important; }
+    .top-bar .page-title { font-size: 1rem !important; }
+    .user-chip-role { display: none !important; }
+  }
+  @media (max-width: 480px) {
+    .content-area { padding: 0.75rem !important; }
+    .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr !important; }
+    .quick-grid { grid-template-columns: repeat(2,1fr) !important; }
+    .inv-stats { grid-template-columns: 1fr 1fr !important; }
+    .inv-stat-card { padding: 0.875rem 1rem !important; }
+    .stat-value { font-size: 1.5rem !important; }
+    .stat-value.stat-sm { font-size: 1.1rem !important; }
+    .card { padding: 1rem !important; }
+    .inv-table td, .inv-table th { padding: 0.5rem 0.625rem !important; font-size: 0.8rem !important; }
+    .sale-id { font-size: 0.7rem !important; }
+    .btn { padding: 0.5rem 0.875rem !important; font-size: 0.8rem !important; }
+    .page-title { font-size: 0.95rem !important; }
+    .dark-toggle { display: none !important; }
+    .top-bar { padding: 0 0.75rem !important; }
+  }
+
 </style>

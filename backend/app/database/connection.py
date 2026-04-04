@@ -55,6 +55,8 @@ def init_db() -> None:
     from app.models.sale import Sale, SaleItem, Invoice
     from app.models.purchase import Purchase, PurchaseItem
     from app.models.supplier import Supplier, SupplierBook
+    from app.models.review import Review          # ← NUEVO
+    from app.models.audit_log import AuditLog     # ← NUEVO
 
     # Crear tablas nuevas (no modifica las existentes)
     Base.metadata.create_all(bind=engine)

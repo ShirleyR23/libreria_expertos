@@ -155,8 +155,12 @@ const isAdmin = user.role_name === 'ADMIN';
               <input type="text" id="bookNombre" class="form-input" placeholder="Título del libro">
             </div>
             <div class="form-group">
-              <label class="form-label">ISBN *</label>
-              <input type="text" id="bookIsbn" class="form-input" placeholder="0000000000">
+              <label class="form-label">ISBN * <span id="isbnLoader" style="display:none;font-size:.78rem;color:var(--blue-mid)">⏳ Buscando…</span></label>
+              <div style="display:flex;gap:.5rem">
+                <input type="text" id="bookIsbn" class="form-input" placeholder="ISBN-10 o ISBN-13" style="flex:1">
+                <button type="button" id="isbnLookupBtn" class="btn btn-secondary" style="white-space:nowrap;flex-shrink:0" title="Autocompletar datos desde Open Library">🔍 Autocompletar</button>
+              </div>
+              <p id="isbnMsg" style="font-size:.78rem;margin-top:.3rem;display:none"></p>
             </div>
             <div class="form-group">
               <label class="form-label">Autor *</label>
@@ -224,23 +228,33 @@ const isAdmin = user.role_name === 'ADMIN';
 
   // ============================================================
   // CATEGORY CONFIG (colores e iconos por categoría)
+  // Dos paletas: light (pasteles suaves) y dark (colores vivos e intensos)
   // ============================================================
   const CAT_CONFIG = {
-    'FICCION':     { color: '#7c3aed', bg: '#f5f3ff', icon: '🌙' },
-    'NO_FICCION':  { color: '#0891b2', bg: '#ecfeff', icon: '📰' },
-    'CIENCIA':     { color: '#16a34a', bg: '#f0fdf4', icon: '🔬' },
-    'TECNOLOGIA':  { color: '#2563eb', bg: '#eff6ff', icon: '💻' },
-    'HISTORIA':    { color: '#b45309', bg: '#fffbeb', icon: '🏛️' },
-    'ARTE':        { color: '#db2777', bg: '#fdf2f8', icon: '🎨' },
-    'LITERATURA':  { color: '#ea580c', bg: '#fff7ed', icon: '✒️' },
-    'INFANTIL':    { color: '#e11d48', bg: '#fff1f2', icon: '🦄' },
-    'ACADEMICO':   { color: '#4338ca', bg: '#eef2ff', icon: '🎓' },
-    'FILOSOFIA':   { color: '#475569', bg: '#f8fafc', icon: '🧠' },
+    //                light mode                          dark mode
+    'FICCION':    { color:'#7c3aed', bg:'#f5f3ff', icon:'🌙', dColor:'#c4b5fd', dBg:'#3b1a78' },
+    'NO_FICCION': { color:'#0891b2', bg:'#ecfeff', icon:'📰', dColor:'#67e8f9', dBg:'#0c3d4a' },
+    'CIENCIA':    { color:'#16a34a', bg:'#f0fdf4', icon:'🔬', dColor:'#4ade80', dBg:'#052e16' },
+    'TECNOLOGIA': { color:'#2563eb', bg:'#eff6ff', icon:'💻', dColor:'#60a5fa', dBg:'#1e3a8a' },
+    'HISTORIA':   { color:'#b45309', bg:'#fffbeb', icon:'🏛️', dColor:'#fcd34d', dBg:'#3d1f00' },
+    'ARTE':       { color:'#db2777', bg:'#fdf2f8', icon:'🎨', dColor:'#f9a8d4', dBg:'#500724' },
+    'LITERATURA': { color:'#ea580c', bg:'#fff7ed', icon:'✒️', dColor:'#fb923c', dBg:'#431407' },
+    'INFANTIL':   { color:'#e11d48', bg:'#fff1f2', icon:'🦄', dColor:'#fda4af', dBg:'#4c0519' },
+    'ACADEMICO':  { color:'#4338ca', bg:'#eef2ff', icon:'🎓', dColor:'#a5b4fc', dBg:'#1e1b4b' },
+    'FILOSOFIA':  { color:'#475569', bg:'#f8fafc', icon:'🧠', dColor:'#94a3b8', dBg:'#0f172a' },
   };
+
+  function isDarkMode() {
+    return document.documentElement.classList.contains('dark');
+  }
 
   function getCatConfig(catName) {
     const key = (catName || '').toUpperCase().replace(/\s/g,'_').replace(/Ó/g,'O').replace(/Í/g,'I');
-    return CAT_CONFIG[key] || { color: '#1d4ed8', bg: '#eff6ff', icon: '📖' };
+    const cfg = CAT_CONFIG[key] || { color:'#1d4ed8', bg:'#eff6ff', icon:'📖', dColor:'#60a5fa', dBg:'#1e3a8a' };
+    if (isDarkMode()) {
+      return { color: cfg.dColor, bg: cfg.dBg, icon: cfg.icon };
+    }
+    return { color: cfg.color, bg: cfg.bg, icon: cfg.icon };
   }
 
   // ============================================================
@@ -269,7 +283,7 @@ const isAdmin = user.role_name === 'ADMIN';
     document.getElementById('statBest').textContent = allBooks.filter(b => b.es_bestseller).length;
   }
 
-  function renderTable(books) {
+  window.renderTable = function renderTable(books) {
     books = books || allBooks;
     const tbody = document.getElementById('invTableBody');
     if (books.length === 0) { showTableState('empty'); return; }
@@ -434,6 +448,46 @@ const isAdmin = user.role_name === 'ADMIN';
   });
 
   // ---- SAVE ----
+  // ── ISBN AUTOCOMPLETE ────────────────────────────────────────────────────
+  document.getElementById('isbnLookupBtn')?.addEventListener('click', async () => {
+    const isbn = document.getElementById('bookIsbn').value.trim();
+    if (!isbn) { alert('Ingresa un ISBN primero'); return; }
+    const btn    = document.getElementById('isbnLookupBtn');
+    const loader = document.getElementById('isbnLoader');
+    const msg    = document.getElementById('isbnMsg');
+    btn.disabled = true;
+    loader.style.display = 'inline';
+    msg.style.display = 'none';
+    try {
+      const r = await fetch(`${API_URL}/isbn/${isbn.replace(/-/g,'')}`);
+      if (!r.ok) {
+        const d = await r.json();
+        msg.textContent = '❌ ' + (d.detail || 'ISBN no encontrado');
+        msg.style.color = 'var(--danger)';
+        msg.style.display = 'block';
+        return;
+      }
+      const data = await r.json();
+      // Fill fields
+      if (data.nombre)           document.getElementById('bookNombre').value    = data.nombre;
+      if (data.autor)            document.getElementById('bookAutor').value     = data.autor;
+      if (data.editorial)        document.getElementById('bookEditorial').value = data.editorial;
+      if (data.anio_publicacion) document.getElementById('bookAnio').value      = data.anio_publicacion;
+      if (data.descripcion)      document.getElementById('bookDescripcion').value = data.descripcion;
+      if (data.imagen_url)       document.getElementById('bookImagenUrl').value = data.imagen_url;
+      msg.textContent = '✅ Datos completados desde Open Library. Revisa y ajusta si es necesario.';
+      msg.style.color = 'var(--success)';
+      msg.style.display = 'block';
+    } catch(e) {
+      msg.textContent = '❌ Error al conectar con Open Library: ' + e.message;
+      msg.style.color = 'var(--danger)';
+      msg.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      loader.style.display = 'none';
+    }
+  });
+
   document.getElementById('saveBookBtn')?.addEventListener('click', async () => {
     const bookId = document.getElementById('bookId').value;
     const isNewBook = !bookId;
@@ -576,6 +630,11 @@ const isAdmin = user.role_name === 'ADMIN';
   // ---- INIT: cargar al abrir la página ----
   loadInventory();
   setInterval(loadInventory, 30000);
+
+  // Re-renderizar cuando cambia dark mode para actualizar colores de rectángulos
+  new MutationObserver(() => {
+    if (typeof window.renderTable === 'function') window.renderTable();
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 </script>
 
 <style>
@@ -681,4 +740,61 @@ const isAdmin = user.role_name === 'ADMIN';
 
   @keyframes shimmer { 0%{background-position:-500px 0} 100%{background-position:500px 0} }
   .skeleton { background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%); background-size:1000px 100%; animation:shimmer 1.5s infinite linear; }
+
+  /* ══ DARK MODE — INVENTARIO ══════════════════════════════════════════════ */
+  html.dark .inv-page       { background: transparent; }
+  html.dark .inv-search     { background: rgba(255,255,255,0.06) !important; border-color: rgba(255,255,255,0.12) !important; color: #e2e8f0 !important; }
+  html.dark .inv-search::placeholder { color: #475569; }
+
+  /* Stat cards */
+  html.dark .inv-stat-card  { background: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.08) !important; backdrop-filter: blur(12px); }
+  html.dark .inv-stat-num   { color: #e2e8f0 !important; }
+  html.dark .inv-stat-label { color: #64748b !important; }
+
+  /* Table */
+  html.dark .inv-table-wrap { background: rgba(255,255,255,0.03) !important; border-color: rgba(255,255,255,0.07) !important; }
+  html.dark .inv-table thead tr { background: rgba(255,255,255,0.06) !important; }
+  html.dark .inv-table th   { color: #94a3b8 !important; border-color: rgba(255,255,255,0.06) !important; }
+  html.dark .inv-table td   { border-color: rgba(255,255,255,0.05) !important; color: #e2e8f0 !important; }
+  html.dark .inv-table tbody tr:hover td { background: rgba(255,255,255,0.04) !important; }
+
+  /* Placeholder rectangles — más intensos en dark (el color ya lo pone el JS) */
+  html.dark .inv-thumb-default {
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12), 0 2px 12px rgba(0,0,0,0.4) !important;
+    filter: saturate(1.3) brightness(1.05);
+  }
+
+  /* Category tags */
+  html.dark .cat-tag { filter: saturate(1.2) brightness(1.1); }
+
+  /* Stock badges */
+  html.dark .stock-ok  { color: #4ade80 !important; }
+  html.dark .stock-low { color: #fbbf24 !important; }
+  html.dark .stock-out { color: #f87171 !important; }
+
+  /* Status badges */
+  html.dark .badge-bs   { background: rgba(245,158,11,0.2) !important; color: #fcd34d !important; border-color: rgba(245,158,11,0.3) !important; }
+  html.dark .badge-disc { background: rgba(220,38,38,0.2)  !important; color: #fca5a5 !important; border-color: rgba(220,38,38,0.3)  !important; }
+
+  /* Action buttons */
+  html.dark .action-btn  { background: rgba(255,255,255,0.07) !important; border-color: rgba(255,255,255,0.1) !important; color: #94a3b8 !important; }
+  html.dark .edit-btn:hover { background: rgba(37,99,235,0.3) !important; color: #60a5fa !important; }
+  html.dark .del-btn:hover  { background: rgba(220,38,38,0.3) !important; color: #f87171 !important; }
+
+  /* Modal de crear/editar */
+  html.dark .inv-modal-overlay { background: rgba(0,0,0,0.7) !important; }
+  html.dark .inv-modal-box     { background: rgba(10,18,35,0.97) !important; border: 1px solid rgba(255,255,255,0.1) !important; backdrop-filter: blur(24px); color: #e2e8f0 !important; }
+  html.dark .inv-modal-title   { color: #f1f5f9 !important; }
+  html.dark .form-label        { color: #94a3b8 !important; }
+  html.dark .form-input        { background: rgba(255,255,255,0.06) !important; border-color: rgba(255,255,255,0.12) !important; color: #e2e8f0 !important; }
+  html.dark .form-input:focus  { border-color: #3b82f6 !important; }
+  html.dark .form-input::placeholder { color: #475569 !important; }
+  html.dark select.form-input option { background: #0f172a; }
+  html.dark .isbn-msg-ok  { color: #4ade80 !important; }
+  html.dark .isbn-msg-err { color: #f87171 !important; }
+
+  /* Toolbar row */
+  html.dark .inv-toolbar    { background: transparent !important; border-color: rgba(255,255,255,0.07) !important; }
+  html.dark .inv-toolbar select { background: rgba(255,255,255,0.06) !important; border-color: rgba(255,255,255,0.12) !important; color: #e2e8f0 !important; }
+
 </style>

@@ -342,3 +342,96 @@ export default {
   getPromotionSuggestions,
   getSalesAnalysis,
 };
+
+// ============================================================
+// RESEÑAS
+// ============================================================
+
+export const getBookReviews = async (libroId) => {
+  const r = await fetch(`${API_URL}/reviews/book/${libroId}`, { headers: getHeaders(false) });
+  return handleResponse(r);
+};
+
+export const getBookRatingSummary = async (libroId) => {
+  const r = await fetch(`${API_URL}/reviews/book/${libroId}/summary`, { headers: getHeaders(false) });
+  return handleResponse(r);
+};
+
+export const canReview = async (libroId) => {
+  const r = await fetch(`${API_URL}/reviews/can-review/${libroId}`, { headers: getHeaders() });
+  return handleResponse(r);
+};
+
+export const getMyReviews = async () => {
+  const r = await fetch(`${API_URL}/reviews/my`, { headers: getHeaders() });
+  return handleResponse(r);
+};
+
+export const createReview = async (data) => {
+  const r = await fetch(`${API_URL}/reviews/`, {
+    method: "POST", headers: getHeaders(), body: JSON.stringify(data),
+  });
+  return handleResponse(r);
+};
+
+export const updateReview = async (id, data) => {
+  const r = await fetch(`${API_URL}/reviews/${id}`, {
+    method: "PUT", headers: getHeaders(), body: JSON.stringify(data),
+  });
+  return handleResponse(r);
+};
+
+export const deleteReview = async (id) => {
+  const r = await fetch(`${API_URL}/reviews/${id}`, { method: "DELETE", headers: getHeaders() });
+  if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+  return true;
+};
+
+// ============================================================
+// REPORTES CSV
+// ============================================================
+
+export const exportReport = async (type) => {
+  const token = getToken();
+  const r = await fetch(`${API_URL}/reports/${type}/export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) throw new Error("Error al exportar");
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `${type}.csv`; a.click();
+  URL.revokeObjectURL(url);
+};
+
+// ============================================================
+// AUDITORÍA
+// ============================================================
+
+export const getAuditLogs = async (params = {}) => {
+  const q = new URLSearchParams();
+  if (params.accion) q.append("accion", params.accion);
+  if (params.tabla)  q.append("tabla",  params.tabla);
+  if (params.limit)  q.append("limit",  params.limit);
+  if (params.skip)   q.append("skip",   params.skip);
+  const r = await fetch(`${API_URL}/audit/logs?${q}`, { headers: getHeaders() });
+  return handleResponse(r);
+};
+
+// ============================================================
+// ISBN EXTERNO
+// ============================================================
+
+export const lookupISBN = async (isbn) => {
+  const r = await fetch(`${API_URL}/isbn/${isbn}`, { headers: getHeaders(false) });
+  return handleResponse(r);
+};
+
+// ============================================================
+// GRÁFICAS
+// ============================================================
+
+export const getSalesByMonth = async (months = 6) => {
+  const r = await fetch(`${API_URL}/admin/sales-by-month?months=${months}`, { headers: getHeaders() });
+  return handleResponse(r);
+};

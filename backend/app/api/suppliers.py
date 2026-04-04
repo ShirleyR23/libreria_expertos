@@ -103,8 +103,12 @@ def create_order(
     Actualiza el stock de los libros automáticamente.
     """
     from app.models.employee import Employee
+
     empleado = db.query(Employee).filter(Employee.user_id == current_user.id).first()
-    if not empleado:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Solo empleados pueden realizar pedidos")
-    return SupplierService(db).create_order(supplier_id, order, empleado.id)
+
+    # Admin sin registro de empleado: intentar usar cualquier empleado, o pasar None
+    if not empleado and current_user.is_admin:
+        empleado = db.query(Employee).first()
+
+    empleado_id = empleado.id if empleado else None
+    return SupplierService(db).create_order(supplier_id, order, empleado_id)

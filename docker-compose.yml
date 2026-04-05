@@ -13,8 +13,8 @@ services:
       POSTGRES_PASSWORD: honduletras_pass
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ./database/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
+      # NOTA: Eliminados los archivos SQL de inicialización
+      # La base de datos se inicializa completamente desde el código Python
     ports:
       - "5432:5432"
     healthcheck:

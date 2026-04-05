@@ -282,8 +282,18 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
 
         <div id="cardFields" style="display:none" class="card-fields-wrap">
           <div class="form-group" style="margin-bottom:0.5rem">
-            <label class="form-label" style="font-size:0.78rem">Últimos 4 dígitos de la tarjeta</label>
-            <input type="text" id="cardLast4" class="form-input" maxlength="4" placeholder="1234" pattern="[0-9]{4}">
+            <label class="form-label" style="font-size:0.78rem">Número de tarjeta</label>
+            <input type="text" id="cardNumber" class="form-input" maxlength="19" placeholder="1234 5678 9012 3456" autocomplete="cc-number">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label" style="font-size:0.78rem">Vencimiento</label>
+              <input type="text" id="cardExpiry" class="form-input" maxlength="5" placeholder="MM/AA" autocomplete="cc-exp">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label" style="font-size:0.78rem">CVV</label>
+              <input type="text" id="cardCvv" class="form-input" maxlength="4" placeholder="123" autocomplete="cc-csc">
+            </div>
           </div>
         </div>
 
@@ -292,9 +302,19 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
           <input type="text" id="buyRtn" class="form-input" placeholder="0000-0000-000000" maxlength="20">
         </div>
 
-        <div class="buy-total-row" style="margin-top:0.75rem">
-          <span>Total a pagar:</span>
-          <span id="buyTotal" class="buy-total-amount">L 0.00</span>
+        <div class="buy-price-breakdown" style="margin-top:0.75rem;border-top:1px solid var(--gray-200);padding-top:0.75rem">
+          <div class="buy-breakdown-row">
+            <span>Subtotal</span>
+            <span id="buySubtotal">L 0.00</span>
+          </div>
+          <div class="buy-breakdown-row muted">
+            <span>ISV (15%)</span>
+            <span id="buyIsv">L 0.00</span>
+          </div>
+          <div class="buy-breakdown-row grand">
+            <span>Total a pagar</span>
+            <span id="buyTotal" class="buy-total-amount">L 0.00</span>
+          </div>
         </div>
       </div>
       <div class="buy-modal-footer">
@@ -824,11 +844,28 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
           <p class="buy-book-avail">${book.stock} disponibles</p>
         </div>
       </div>`;
-    document.getElementById('buyTotal').textContent = `L ${parseFloat(book.precio).toFixed(2)}`;
+    const _precio = parseFloat(book.precio);
+    const _isv = _precio * 0.15;
+    const _total = _precio + _isv;
+    document.getElementById('buySubtotal').textContent = `L ${_precio.toFixed(2)}`;
+    document.getElementById('buyIsv').textContent = `L ${_isv.toFixed(2)}`;
+    document.getElementById('buyTotal').textContent = `L ${_total.toFixed(2)}`;
     document.getElementById('buyModal').style.display = 'flex';
   }
 
   document.getElementById('closeBuyModal')?.addEventListener('click', () => { document.getElementById('buyModal').style.display = 'none'; });
+
+  // Auto-format card number (spaces every 4 digits)
+  document.getElementById('cardNumber')?.addEventListener('input', (e) => {
+    let v = e.target.value.replace(/\D/g, '').substring(0, 16);
+    e.target.value = v.match(/.{1,4}/g)?.join(' ') || v;
+  });
+  // Auto-format expiry MM/AA
+  document.getElementById('cardExpiry')?.addEventListener('input', (e) => {
+    let v = e.target.value.replace(/\D/g, '').substring(0, 4);
+    if (v.length >= 3) v = v.substring(0,2) + '/' + v.substring(2);
+    e.target.value = v;
+  });
 
   // Payment method toggle
   document.querySelectorAll('input[name="payMethod"]').forEach(r => {
@@ -840,6 +877,15 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
 
   document.getElementById('confirmBuyBtn')?.addEventListener('click', async () => {
     if (!buyBook) return;
+    const pm = document.querySelector('input[name="payMethod"]:checked')?.value || 'efectivo';
+    if (pm === 'tarjeta') {
+      const cNum = document.getElementById('cardNumber')?.value.replace(/\s/g,'');
+      const cExp = document.getElementById('cardExpiry')?.value.trim();
+      const cCvv = document.getElementById('cardCvv')?.value.trim();
+      if (!cNum || cNum.length < 13) { Modal.error('Tarjeta inválida', 'Ingresa el número completo de tu tarjeta.'); return; }
+      if (!cExp || cExp.length < 5) { Modal.error('Tarjeta inválida', 'Ingresa la fecha de vencimiento (MM/AA).'); return; }
+      if (!cCvv || cCvv.length < 3) { Modal.error('Tarjeta inválida', 'Ingresa el CVV de tu tarjeta.'); return; }
+    }
     const btn = document.getElementById('confirmBuyBtn');
     btn.disabled = true; btn.textContent = 'Procesando…';
     try {
@@ -853,7 +899,8 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
           notas: (() => {
             const pm = document.querySelector('input[name="payMethod"]:checked')?.value || 'efectivo';
             const rtn = document.getElementById('buyRtn').value.trim();
-            const c4 = document.getElementById('cardLast4')?.value.trim();
+            const cNum = document.getElementById('cardNumber')?.value.replace(/\s/g,'').trim();
+            const c4 = cNum ? cNum.slice(-4) : '';
             let n = 'Copia digital | Pago: ' + pm.charAt(0).toUpperCase() + pm.slice(1);
             if (pm === 'tarjeta' && c4) n += ' (*' + c4 + ')';
             if (rtn) n += ' | RTN: ' + rtn;
@@ -1417,6 +1464,10 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .pay-method-opt input:checked + .pay-method-card { border-color:var(--blue-mid); background:var(--blue-ghost); color:var(--blue-mid); }
   .pay-method-card:hover { border-color:var(--blue-mid); }
   .card-fields-wrap { margin-bottom:0.5rem; }
+  .buy-price-breakdown { display:flex; flex-direction:column; gap:0.3rem; }
+  .buy-breakdown-row { display:flex; justify-content:space-between; font-size:0.88rem; color:var(--gray-600); }
+  .buy-breakdown-row.muted { font-size:0.8rem; color:var(--gray-400); }
+  .buy-breakdown-row.grand { font-size:1.05rem; font-weight:700; color:var(--navy); margin-top:0.35rem; padding-top:0.5rem; border-top:2px solid var(--gray-200); }
 
   @media(max-width:768px) {
     .hero-section { padding:3rem 1rem 2rem; }

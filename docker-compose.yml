@@ -1,95 +1,67 @@
-# ============================================================
-# SISTEMA DE GESTIÓN PARA LIBRERÍA
-# Docker Compose - Configuración Completa
-# 
-# COMANDO: docker-compose up -d
-# ============================================================
-
-version: '3.8'
+version: "3.9"
 
 services:
-  # ==========================================================
-  # BASE DE DATOS: PostgreSQL (solo para Docker)
-  # ==========================================================
+
+  # ── BASE DE DATOS ────────────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
-    container_name: libreria-db
+    container_name: honduletras_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: libreria_user
-      POSTGRES_PASSWORD: libreria_pass
-      POSTGRES_DB: libreria_db
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: honduletras
+      POSTGRES_USER: honduletras
+      POSTGRES_PASSWORD: honduletras_pass
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
+    ports:
+      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U libreria_user -d libreria_db"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U honduletras"]
+      interval: 5s
       timeout: 5s
-      retries: 5
-    networks:
-      - libreria-network
+      retries: 10
 
-  # ==========================================================
-  # BACKEND: FastAPI + Python 3.13
-  # ==========================================================
+  # ── BACKEND (FastAPI) ────────────────────────────────────────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: libreria-backend
+    container_name: honduletras_backend
     restart: unless-stopped
-    environment:
-      # Usar PostgreSQL cuando se ejecuta con Docker
-      DATABASE_URL: postgresql://libreria_user:libreria_pass@db:5432/libreria_db
-      SECRET_KEY: tu-clave-secreta-super-segura-cambia-esto-en-produccion
-      ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 60
-      ENVIRONMENT: production
+    env_file:
+      - ./backend/.env.docker
+    volumes:
+      # Hot reload: monta el código fuente en vivo
+      - ./backend:/app
+      # Persiste imágenes y PDFs subidos entre reinicios
+      - uploads_data:/app/uploads
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
-    networks:
-      - libreria-network
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # ==========================================================
-  # FRONTEND: Astro
-  # ==========================================================
+  # ── FRONTEND (Astro) ─────────────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: libreria-frontend
+    container_name: honduletras_frontend
     restart: unless-stopped
     environment:
-      PUBLIC_API_URL: http://localhost:8000/api/v1
+      - PUBLIC_API_URL=http://localhost:8000/api/v1
+    volumes:
+      # Hot reload: monta src y public en vivo
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
     ports:
       - "4321:4321"
     depends_on:
       - backend
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    networks:
-      - libreria-network
-    command: npm run dev -- --host
 
-# ============================================================
-# VOLÚMENES
-# ============================================================
 volumes:
   postgres_data:
-    driver: local
-
-# ============================================================
-# REDES
-# ============================================================
-networks:
-  libreria-network:
-    driver: bridge
+  uploads_data:

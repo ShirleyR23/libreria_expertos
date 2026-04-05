@@ -100,6 +100,23 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
               </label>
             </div>
 
+            <div id="cartCardFields" style="display:none;margin:0.75rem 0 0">
+              <div class="form-group" style="margin-bottom:0.5rem">
+                <label class="form-label" style="font-size:0.78rem">Número de tarjeta</label>
+                <input type="text" id="cartCardNumber" class="form-input" maxlength="19" placeholder="1234 5678 9012 3456" autocomplete="cc-number">
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-bottom:0.5rem">
+                <div class="form-group" style="margin-bottom:0">
+                  <label class="form-label" style="font-size:0.78rem">Vencimiento</label>
+                  <input type="text" id="cartCardExpiry" class="form-input" maxlength="5" placeholder="MM/AA" autocomplete="cc-exp">
+                </div>
+                <div class="form-group" style="margin-bottom:0">
+                  <label class="form-label" style="font-size:0.78rem">CVV</label>
+                  <input type="text" id="cartCardCvv" class="form-input" maxlength="4" placeholder="123" autocomplete="cc-csc">
+                </div>
+              </div>
+            </div>
+
             <div class="form-group" style="margin:0.75rem 0 0">
               <label class="form-label" style="font-size:0.78rem">RTN <span class="muted-label">(opcional)</span></label>
               <input type="text" id="checkoutRtn" class="form-input" placeholder="0000-0000-000000" maxlength="20">
@@ -213,6 +230,24 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     if (isCliente) {
       loginNotice.style.display = 'none';
       paySection.style.display = 'block';
+      // Setup card method toggle (only once)
+      if (!paySection._cardListenerSet) {
+        paySection._cardListenerSet = true;
+        document.querySelectorAll('input[name="cartPayMethod"]').forEach(r => {
+          r.addEventListener('change', () => {
+            document.getElementById('cartCardFields').style.display = r.value === 'tarjeta' ? 'block' : 'none';
+          });
+        });
+        document.getElementById('cartCardNumber')?.addEventListener('input', (e) => {
+          let v = e.target.value.replace(/\D/g, '').substring(0, 16);
+          e.target.value = v.match(/.{1,4}/g)?.join(' ') || v;
+        });
+        document.getElementById('cartCardExpiry')?.addEventListener('input', (e) => {
+          let v = e.target.value.replace(/\D/g, '').substring(0, 4);
+          if (v.length >= 3) v = v.substring(0,2) + '/' + v.substring(2);
+          e.target.value = v;
+        });
+      }
     } else {
       loginNotice.style.display = 'block';
       paySection.style.display = 'none';
@@ -277,7 +312,18 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
       const tok = localStorage.getItem('token');
       const pm = document.querySelector('input[name="cartPayMethod"]:checked')?.value || 'efectivo';
       const rtn = document.getElementById('checkoutRtn')?.value.trim() || '';
+      if (pm === 'tarjeta') {
+        const cNum = document.getElementById('cartCardNumber')?.value.replace(/\s/g,'');
+        const cExp = document.getElementById('cartCardExpiry')?.value.trim();
+        const cCvv = document.getElementById('cartCardCvv')?.value.trim();
+        if (!cNum || cNum.length < 13) { Modal.error('Tarjeta inválida', 'Ingresa el número completo de tu tarjeta.'); btn.disabled=false; txt.style.display='inline'; spin.style.display='none'; return; }
+        if (!cExp || cExp.length < 5) { Modal.error('Tarjeta inválida', 'Ingresa la fecha de vencimiento (MM/AA).'); btn.disabled=false; txt.style.display='inline'; spin.style.display='none'; return; }
+        if (!cCvv || cCvv.length < 3) { Modal.error('Tarjeta inválida', 'Ingresa el CVV de tu tarjeta.'); btn.disabled=false; txt.style.display='inline'; spin.style.display='none'; return; }
+      }
+      const cNum2 = document.getElementById('cartCardNumber')?.value.replace(/\s/g,'').trim();
+      const c4 = cNum2 ? cNum2.slice(-4) : '';
       let notas = `Pedido desde carrito | Pago: ${pm.charAt(0).toUpperCase() + pm.slice(1)}`;
+      if (pm === 'tarjeta' && c4) notas += ` (*${c4})`;
       if (rtn) notas += ` | RTN: ${rtn}`;
 
       const r = await fetch(`${BACKEND}/sales/online`, {

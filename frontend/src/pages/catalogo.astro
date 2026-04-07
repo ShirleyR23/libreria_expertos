@@ -255,32 +255,15 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
       <div class="buy-modal-body">
         <div id="buyBookInfo"></div>
 
-        <!-- Compra digital: siempre 1 copia -->
-        <div class="buy-digital-notice">
-          <span class="buy-digital-icon">📱</span>
-          <div>
-            <div class="buy-digital-title">Copia digital — 1 unidad</div>
-            <div class="buy-digital-desc">Las compras online son copias digitales. Podrás leer el libro desde "Mis Libros" con tu cuenta.</div>
-          </div>
-        </div>
-
         <div class="buy-section-title">Método de pago</div>
         <div class="pay-method-grid">
           <label class="pay-method-opt">
-            <input type="radio" name="payMethod" value="efectivo" checked>
-            <span class="pay-method-card">💵 Efectivo</span>
-          </label>
-          <label class="pay-method-opt">
-            <input type="radio" name="payMethod" value="tarjeta">
+            <input type="radio" name="payMethod" value="tarjeta" checked>
             <span class="pay-method-card">💳 Tarjeta</span>
-          </label>
-          <label class="pay-method-opt">
-            <input type="radio" name="payMethod" value="transferencia">
-            <span class="pay-method-card">🏦 Transferencia</span>
           </label>
         </div>
 
-        <div id="cardFields" style="display:none" class="card-fields-wrap">
+        <div id="cardFields" style="display:block" class="card-fields-wrap">
           <div class="form-group" style="margin-bottom:0.5rem">
             <label class="form-label" style="font-size:0.78rem">Número de tarjeta</label>
             <input type="text" id="cardNumber" class="form-input" maxlength="19" placeholder="1234 5678 9012 3456" autocomplete="cc-number">
@@ -1826,5 +1809,16 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   html.dark .vr-titulo { color:#e2e8f0; }
   html.dark .vr-cuerpo { color:#94a3b8; }
   html.dark .vr-author { color:#475569; }
+
+  html.dark .buy-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;      
+  justify-content: center;
+  padding: 1rem;           
+  z-index: 2000;
+  overflow-y: auto;        
 
 </style>

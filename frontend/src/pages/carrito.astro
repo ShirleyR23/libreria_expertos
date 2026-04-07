@@ -87,20 +87,12 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
             <div class="pay-section-title">Método de pago</div>
             <div class="pay-method-grid">
               <label class="pay-method-opt">
-                <input type="radio" name="cartPayMethod" value="efectivo" checked>
-                <span class="pay-method-card">💵 Efectivo</span>
-              </label>
-              <label class="pay-method-opt">
-                <input type="radio" name="cartPayMethod" value="tarjeta">
+                <input type="radio" name="cartPayMethod" value="tarjeta" checked>
                 <span class="pay-method-card">💳 Tarjeta</span>
-              </label>
-              <label class="pay-method-opt">
-                <input type="radio" name="cartPayMethod" value="transferencia">
-                <span class="pay-method-card">🏦 Transferencia</span>
               </label>
             </div>
 
-            <div id="cartCardFields" style="display:none;margin:0.75rem 0 0">
+            <div id="cartCardFields" style="display:block;margin:0.75rem 0 0">
               <div class="form-group" style="margin-bottom:0.5rem">
                 <label class="form-label" style="font-size:0.78rem">Número de tarjeta</label>
                 <input type="text" id="cartCardNumber" class="form-input" maxlength="19" placeholder="1234 5678 9012 3456" autocomplete="cc-number">
@@ -233,7 +225,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
       // Setup card method toggle (only once)
       if (!paySection._cardListenerSet) {
         paySection._cardListenerSet = true;
-        document.querySelectorAll('input[name="cartPayMethod"]').forEach(r => {
+         document.querySelectorAll('input[name="cartPayMethod"]').forEach(r => {
           r.addEventListener('change', () => {
             document.getElementById('cartCardFields').style.display = r.value === 'tarjeta' ? 'block' : 'none';
           });

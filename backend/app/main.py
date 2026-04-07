@@ -150,15 +150,18 @@ os.makedirs(os.path.join(uploads_base, "covers"), exist_ok=True)
 os.makedirs(os.path.join(uploads_base, "pdfs"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_base), name="uploads")
 
-# ── Middleware (orden importa: primero seguridad, luego CORS) ──────────────
-app.add_middleware(SecurityMiddleware)
+# ── Middleware (orden importa: SecurityMiddleware primero, CORS al final = más externo) ──
+# En Starlette el último add_middleware queda como capa más externa (primera en procesar).
+# CORSMiddleware DEBE ser el más externo para manejar preflight OPTIONS correctamente.
 
+app.add_middleware(SecurityMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:4321",
         "http://localhost:3000",
         "http://127.0.0.1:4321",
+        "http://127.0.0.1:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],

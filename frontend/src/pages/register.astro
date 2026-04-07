@@ -28,15 +28,14 @@ import PublicLayout from '../layouts/PublicLayout.astro';
 
       <div id="errorAlert" class="auth-alert auth-alert-error" style="display:none"></div>
 
-      <div class="form-grid-2">
-        <div class="form-group">
-          <label class="form-label">Nombre completo *</label>
-          <input type="text" id="nombre" class="form-input" placeholder="Tu nombre">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Correo electrónico *</label>
-          <input type="email" id="email" class="form-input" placeholder="tu@email.com">
-        </div>
+      <div class="form-group">
+        <label class="form-label">Nombre completo *</label>
+        <input type="text" id="nombre" class="form-input" placeholder="Tu nombre">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Correo electrónico *</label>
+        <input type="email" id="email" class="form-input" placeholder="tu@email.com">
       </div>
 
       <div class="form-group">
@@ -51,20 +50,13 @@ import PublicLayout from '../layouts/PublicLayout.astro';
         </div>
       </div>
 
-      <div class="form-grid-2">
-        <div class="form-group">
-          <label class="form-label">Teléfono</label>
-          <input type="tel" id="telefono" class="form-input" placeholder="5555-1234">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Ciudad</label>
-          <input type="text" id="ciudad" class="form-input" placeholder="Tu ciudad">
-        </div>
-      </div>
-
       <div class="form-group">
-        <label class="form-label">Dirección</label>
-        <input type="text" id="direccion" class="form-input" placeholder="Tu dirección completa">
+        <label class="form-label">Confirmar contraseña *</label>
+        <div class="input-wrap">
+          <input type="password" id="confirmPassword" class="form-input" placeholder="Repite tu contraseña">
+          <button type="button" id="toggleConfirmPwd" class="toggle-pwd">👁</button>
+        </div>
+        <div id="confirmMsg" class="confirm-msg" style="display:none"></div>
       </div>
 
       <button id="registerBtn" class="btn btn-primary btn-full">
@@ -82,6 +74,11 @@ import PublicLayout from '../layouts/PublicLayout.astro';
 
   document.getElementById('togglePwd')?.addEventListener('click', () => {
     const inp = document.getElementById('password') as HTMLInputElement;
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+  });
+
+  document.getElementById('toggleConfirmPwd')?.addEventListener('click', () => {
+    const inp = document.getElementById('confirmPassword') as HTMLInputElement;
     inp.type = inp.type === 'password' ? 'text' : 'password';
   });
 
@@ -112,18 +109,31 @@ import PublicLayout from '../layouts/PublicLayout.astro';
     lbl.style.color = lvl.color;
   });
 
+  document.getElementById('confirmPassword')?.addEventListener('input', () => {
+    const pwd = (document.getElementById('password') as HTMLInputElement).value;
+    const confirm = (document.getElementById('confirmPassword') as HTMLInputElement).value;
+    const msg = document.getElementById('confirmMsg')!;
+    if (!confirm) { msg.style.display = 'none'; return; }
+    msg.style.display = 'block';
+    if (pwd === confirm) {
+      msg.textContent = '✓ Las contraseñas coinciden';
+      msg.style.color = '#16a34a';
+    } else {
+      msg.textContent = '✗ Las contraseñas no coinciden';
+      msg.style.color = '#dc2626';
+    }
+  });
+
   document.getElementById('registerBtn')?.addEventListener('click', async () => {
     const nombre = (document.getElementById('nombre') as HTMLInputElement).value.trim();
     const email = (document.getElementById('email') as HTMLInputElement).value.trim();
     const password = (document.getElementById('password') as HTMLInputElement).value;
-    const telefono = (document.getElementById('telefono') as HTMLInputElement).value.trim();
-    const ciudad = (document.getElementById('ciudad') as HTMLInputElement).value.trim();
-    const direccion = (document.getElementById('direccion') as HTMLInputElement).value.trim();
+    const confirmPassword = (document.getElementById('confirmPassword') as HTMLInputElement).value;
     const err = document.getElementById('errorAlert')!;
     err.style.display = 'none';
 
-    if (!nombre || !email || !password) {
-      err.textContent = 'Por favor completa los campos obligatorios (*)';
+    if (!nombre || !email || !password || !confirmPassword) {
+      err.textContent = 'Por favor completa todos los campos.';
       err.style.display = 'block'; return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -138,6 +148,10 @@ import PublicLayout from '../layouts/PublicLayout.astro';
       err.textContent = 'La contraseña debe tener al menos 6 caracteres.';
       err.style.display = 'block'; return;
     }
+    if (password !== confirmPassword) {
+      err.textContent = 'Las contraseñas no coinciden.';
+      err.style.display = 'block'; return;
+    }
 
     const btn = document.getElementById('registerBtn') as HTMLButtonElement;
     btn.disabled = true;
@@ -148,7 +162,7 @@ import PublicLayout from '../layouts/PublicLayout.astro';
       const res = await fetch(`${API_URL}/auth/register-client`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre, email, password, telefono: telefono || null, ciudad: ciudad || null, direccion: direccion || null }),
+        body: JSON.stringify({ nombre, email, password, confirm_password: confirmPassword }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -159,6 +173,7 @@ import PublicLayout from '../layouts/PublicLayout.astro';
           else if (/already exists|already registered|duplicat/i.test(raw)) msg = 'Ya existe una cuenta con ese correo electrónico.';
           else if (/field required/i.test(raw)) msg = 'Todos los campos obligatorios deben completarse.';
           else if (/string_too_short|at least/i.test(raw)) msg = 'Uno de los campos ingresados es demasiado corto.';
+          else if (/no coinciden/i.test(raw)) msg = 'Las contraseñas no coinciden.';
           else if (raw.length < 200) msg = raw;
         }
         throw new Error(msg);
@@ -195,15 +210,14 @@ import PublicLayout from '../layouts/PublicLayout.astro';
   .login-subtitle { color: var(--gray-400); font-size: 0.9rem; }
   .auth-alert { padding: 0.875rem 1rem; border-radius: var(--radius-sm); margin-bottom: 1.25rem; font-size: 0.875rem; }
   .auth-alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-  .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
-  @media (max-width: 500px) { .form-grid-2 { grid-template-columns: 1fr; } }
   .input-wrap { position: relative; }
   .toggle-pwd { position: absolute; right: 0.875rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 1rem; opacity: 0.5; }
   .pwd-strength { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; }
   .pwd-bar { flex: 1; height: 4px; background: var(--gray-200); border-radius: 999px; overflow: hidden; }
   .pwd-bar-fill { height: 100%; border-radius: 999px; transition: all 0.3s; width: 0; }
   .pwd-label { font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
-  .btn-full { width: 100%; padding: 0.875rem; font-size: 1rem; }
+  .confirm-msg { font-size: 0.8rem; font-weight: 600; margin-top: 0.4rem; }
+  .btn-full { width: 100%; padding: 0.875rem; font-size: 1rem; margin-top: 0.5rem; }
   .auth-footer-link { text-align: center; font-size: 0.875rem; color: var(--gray-400); }
   .auth-footer-link a { color: var(--blue-mid); font-weight: 600; text-decoration: none; }
   @keyframes spin { to { transform: rotate(360deg); } }

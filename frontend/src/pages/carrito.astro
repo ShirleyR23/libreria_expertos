@@ -167,8 +167,8 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   function addToCart(book) {
     const cart = getCart();
     const idx = cart.findIndex(i => i.id === book.id);
-    if (idx >= 0) { cart[idx].qty = (cart[idx].qty || 1) + 1; }
-    else { cart.push({ ...book, qty: 1 }); }
+    if (idx >= 0) return; // Copia digital: no se puede agregar más de una vez
+    cart.push({ ...book, qty: 1 });
     saveCart(cart);
   }
   function removeFromCart(bookId) {
@@ -176,7 +176,8 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     renderCart();
   }
   function updateQty(bookId, qty) {
-    const cart = getCart().map(i => i.id === bookId ? { ...i, qty: Math.max(1, qty) } : i);
+    // Copias digitales: cantidad siempre 1
+    const cart = getCart().map(i => i.id === bookId ? { ...i, qty: 1 } : i);
     saveCart(cart);
     renderCart();
   }
@@ -264,10 +265,9 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
             <p class="cart-item-price">L ${price.toFixed(2)} c/u</p>
           </div>
           <div class="cart-item-controls">
-            <div class="qty-control">
-              <button class="qty-btn" onclick="updateQty(${item.id}, ${qty - 1})" ${qty <= 1 ? 'disabled' : ''}>−</button>
-              <span class="qty-val">${qty}</span>
-              <button class="qty-btn" onclick="updateQty(${item.id}, ${qty + 1})" ${qty >= item.stock ? 'disabled' : ''}>+</button>
+            <div class="qty-control digital-qty">
+              <span class="qty-val">1</span>
+              <span class="qty-digital-label">copia digital</span>
             </div>
             <p class="cart-item-subtotal">L ${subtotal.toFixed(2)}</p>
             <button class="cart-item-remove" onclick="removeFromCart(${item.id})">🗑</button>
@@ -276,7 +276,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     }).join('');
 
     // Summary
-    const subtotal = cart.reduce((s, i) => s + parseFloat(i.precio) * (i.qty || 1), 0);
+    const subtotal = cart.reduce((s, i) => s + parseFloat(i.precio), 0); // copia digital: qty siempre 1
     const tax = subtotal * 0.15;
     const total = subtotal + tax;
     document.getElementById('summarySubtotal').textContent = `L ${subtotal.toFixed(2)}`;
@@ -285,7 +285,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
 
     const summaryRows = document.getElementById('summaryRows');
     summaryRows.innerHTML = cart.map(i =>
-      `<div class="summary-item-row"><span>${i.nombre} ×${i.qty || 1}</span><span>L ${(parseFloat(i.precio) * (i.qty || 1)).toFixed(2)}</span></div>`
+      `<div class="summary-item-row"><span>${i.nombre} ×1</span><span>L ${parseFloat(i.precio).toFixed(2)}</span></div>`
     ).join('');
   }
 
@@ -323,7 +323,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tok}` },
         body: JSON.stringify({
           tipo: 'ONLINE',
-          items: cart.map(i => ({ libro_id: i.id, cantidad: i.qty || 1 })),
+          items: cart.map(i => ({ libro_id: i.id, cantidad: 1 })), // copia digital: siempre 1
           notas,
         })
       });
@@ -407,6 +407,8 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .cart-item-price { font-size:0.875rem; color:#2563eb; font-weight:600; }
   .cart-item-controls { display:flex; flex-direction:column; align-items:flex-end; gap:0.625rem; flex-shrink:0; }
   .qty-control { display:flex; align-items:center; gap:0.5rem; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:8px; padding:0.25rem 0.5rem; }
+  .qty-control.digital-qty { background:#eff6ff; border-color:#bfdbfe; gap:0.4rem; }
+  .qty-digital-label { font-size:0.7rem; color:#3b82f6; font-weight:600; }
   .qty-btn { background:none; border:none; width:24px; height:24px; cursor:pointer; font-size:1.1rem; font-weight:700; color:#475569; display:flex; align-items:center; justify-content:center; border-radius:4px; }
   .qty-btn:hover:not(:disabled) { background:#e2e8f0; }
   .qty-btn:disabled { opacity:0.35; cursor:default; }

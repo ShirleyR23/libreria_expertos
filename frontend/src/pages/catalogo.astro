@@ -643,8 +643,9 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     const precio = parseFloat(book.precio);
     const catName = book.categoria?.name || '';
     const cfg = getCfg(catName);
-    const outOfStock = book.stock === 0;
-    const lowStock = book.stock > 0 && book.stock < 5;
+    // Copias digitales: el stock no bloquea la compra
+    const outOfStock = false;
+    const lowStock = false;
     const hasImg = !!book.imagen_url;
     const imgUrl = hasImg
       ? (book.imagen_url.startsWith('http') ? book.imagen_url : `${BACKEND_BASE}${book.imagen_url}`)
@@ -666,11 +667,8 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
       : '';
 
     // Stock label
-    const stockLabel = outOfStock
-      ? `<span class="book-stock out">✖ Sin stock</span>`
-      : lowStock
-        ? `<span class="book-stock low">⚡ Solo ${book.stock} disponibles</span>`
-        : `<span class="book-stock ok">✔ ${book.stock} disponibles</span>`;
+    // Copias digitales: no se muestra stock
+    const stockLabel = `<span class="book-stock digital">📱 Copia digital</span>`;
 
     // Buttons: add to cart / quick buy — hidden if client already owns this book
     const yaComprado = isCliente && window._purchasedIds && window._purchasedIds.has(book.id);
@@ -681,7 +679,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
       ? `<button class="btn-buy" data-id="${book.id}" data-nombre="${book.nombre}" data-precio="${precio}" data-stock="${book.stock}" data-img="${book.imagen_url || ''}" title="Comprar ahora">⚡</button>`
       : '';
     const ownedBadge = yaComprado
-      ? `<span class="btn-owned">✅ Ya lo tienes</span>`
+      ? `<span class="btn-owned">📚 Ya lo compraste</span>`
       : '';
 
     // PDF preview button (visible to all if book has PDF)
@@ -986,11 +984,15 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     let cart = [];
     try { cart = JSON.parse(localStorage.getItem(CART_KEY) || '[]'); } catch {}
     const idx = cart.findIndex(i => i.id === book.id);
-    if (idx >= 0) { cart[idx].qty = (cart[idx].qty || 1) + 1; }
-    else { cart.push({ ...book, qty: 1 }); }
+    if (idx >= 0) {
+      // Copia digital: no se puede agregar el mismo libro más de una vez
+      showCartToast(book.nombre, true);
+      return;
+    }
+    cart.push({ ...book, qty: 1 });
     localStorage.setItem(CART_KEY, JSON.stringify(cart));
     updateCartBadgeNav();
-    showCartToast(book.nombre);
+    showCartToast(book.nombre, false);
   };
 
   function updateCartBadgeNav() {
@@ -1001,7 +1003,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
     if (badge) { badge.textContent = total; badge.style.display = total > 0 ? 'inline-flex' : 'none'; }
   }
 
-  function showCartToast(nombre) {
+  function showCartToast(nombre, alreadyInCart = false) {
     let t = document.getElementById('cartToast');
     if (!t) {
       t = document.createElement('div');
@@ -1010,8 +1012,12 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
       document.body.appendChild(t);
     }
     const short = nombre.length > 32 ? nombre.slice(0, 32) + '…' : nombre;
-    const cartLink = isCliente ? `<a href="/carrito">Ver carrito →</a>` : `<a href="#" onclick="event.preventDefault();document.getElementById('loginRequiredModal').style.display='flex'">Ver carrito →</a>`;
-    t.innerHTML = `<span>✅</span><span><strong>${short}</strong> agregado al carrito</span>${cartLink}`;
+    if (alreadyInCart) {
+      t.innerHTML = `<span>⚠️</span><span><strong>${short}</strong> ya está en tu carrito</span>`;
+    } else {
+      const cartLink = isCliente ? `<a href="/carrito">Ver carrito →</a>` : `<a href="#" onclick="event.preventDefault();document.getElementById('loginRequiredModal').style.display='flex'">Ver carrito →</a>`;
+      t.innerHTML = `<span>✅</span><span><strong>${short}</strong> agregado al carrito</span>${cartLink}`;
+    }
     t.classList.add('show');
     clearTimeout(t._timer);
     t._timer = setTimeout(() => t.classList.remove('show'), 3500);
@@ -1396,6 +1402,7 @@ const dashboardUrl = user?.role_name === 'ADMIN' ? '/dashboard-admin' : user?.ro
   .book-stock.ok { color:#16a34a; }
   .book-stock.low { color:#d97706; }
   .book-stock.out { color:#dc2626; }
+  .book-stock.digital { color:#2563eb; font-weight:600; }
   .btn-buy { width:34px; height:34px; border-radius:50%; background:var(--blue-mid); color:white; border:none; cursor:pointer; font-size:0.85rem; display:flex; align-items:center; justify-content:center; transition:all 0.2s; flex-shrink:0; box-shadow:0 2px 8px rgba(37,99,235,0.3); }
   .btn-buy:hover { background:var(--blue-dark); transform:scale(1.1); }
 

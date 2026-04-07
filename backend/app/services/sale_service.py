@@ -40,7 +40,9 @@ class SaleService:
     ) -> Sale:
         """Crea una nueva venta con sus items."""
         
-        # Validar stock para cada item
+        is_online = sale_data.tipo == SaleType.ONLINE
+
+        # Validar items
         items_detalle = []
         subtotal = Decimal("0")
         
@@ -56,11 +58,13 @@ class SaleService:
                     detail=f"Libro con ID {item_data.libro_id} no encontrado"
                 )
             
-            if book.stock < item_data.cantidad:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Stock insuficiente para '{book.nombre}'. Disponible: {book.stock}, Solicitado: {item_data.cantidad}"
-                )
+            # Solo verificar stock para ventas presenciales (físicas)
+            if not is_online:
+                if book.stock < item_data.cantidad:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Stock insuficiente para '{book.nombre}'. Disponible: {book.stock}, Solicitado: {item_data.cantidad}"
+                    )
             
             item_subtotal = Decimal(str(book.precio)) * item_data.cantidad
             subtotal += item_subtotal
@@ -74,7 +78,7 @@ class SaleService:
         
         # Calcular totales
         impuesto = subtotal * self.IVA_RATE
-        descuento = Decimal("0")  # Lógica de descuentos puede agregarse aquí
+        descuento = Decimal("0")
         total = subtotal + impuesto - descuento
         
         # Crear venta
@@ -93,7 +97,7 @@ class SaleService:
         self.db.add(new_sale)
         self.db.flush()  # Para obtener el ID
         
-        # Crear items de venta y actualizar stock
+        # Crear items de venta
         for detalle in items_detalle:
             sale_item = SaleItem(
                 venta_id=new_sale.id,
@@ -104,8 +108,15 @@ class SaleService:
             )
             self.db.add(sale_item)
             
-            # Actualizar stock del libro
-            detalle["book"].registrar_venta(detalle["cantidad"])
+            # Solo actualizar stock para ventas presenciales (físicas)
+            if not is_online:
+                detalle["book"].registrar_venta(detalle["cantidad"])
+            else:
+                # Para ventas online solo registrar estadísticas de ventas, sin tocar stock
+                from datetime import datetime, timezone
+                detalle["book"].total_ventas += detalle["cantidad"]
+                detalle["book"].ventas_ultimos_30_dias += detalle["cantidad"]
+                detalle["book"].ultima_venta = datetime.now(timezone.utc)
         
         self.db.commit()
         
@@ -210,7 +221,7 @@ class SaleService:
         return query.order_by(Sale.created_at.desc()).offset(skip).limit(limit).all()
     
     def cancel_sale(self, sale_id: int) -> Sale:
-        """Cancela una venta y restaura el stock."""
+        """Cancela una venta. Solo restaura el stock para ventas presenciales."""
         sale = self.get_sale_by_id(sale_id)
         if not sale:
             raise HTTPException(
@@ -224,10 +235,16 @@ class SaleService:
                 detail="La venta ya está cancelada"
             )
         
-        # Restaurar stock
-        for item in sale.items:
-            item.book.stock += item.cantidad
-            item.book.total_ventas -= item.cantidad
+        # Solo restaurar stock para ventas presenciales
+        if sale.tipo == SaleType.PRESENCIAL:
+            for item in sale.items:
+                item.book.stock += item.cantidad
+                item.book.total_ventas -= item.cantidad
+        else:
+            # Para ventas online solo revertir estadísticas, sin tocar stock
+            for item in sale.items:
+                item.book.total_ventas -= item.cantidad
+                item.book.ventas_ultimos_30_dias -= item.cantidad
         
         # Actualizar estado
         sale.status = SaleStatus.CANCELADA

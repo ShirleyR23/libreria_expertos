@@ -3,7 +3,7 @@ Schemas de Clientes - Pydantic v2.
 """
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 class ClientBase(BaseModel):
@@ -24,10 +24,13 @@ class ClientRegister(BaseModel):
     nombre: str = Field(..., min_length=2, max_length=100)
     email: str
     password: str = Field(..., min_length=6)
-    telefono: Optional[str] = Field(None, max_length=20)
-    direccion: Optional[str] = Field(None, max_length=255)
-    ciudad: Optional[str] = Field(None, max_length=100)
-    codigo_postal: Optional[str] = Field(None, max_length=20)
+    confirm_password: str = Field(..., min_length=6)
+
+    @model_validator(mode="after")
+    def passwords_match(self) -> "ClientRegister":
+        if self.password != self.confirm_password:
+            raise ValueError("Las contraseñas no coinciden")
+        return self
 
 
 class ClientResponse(ClientBase):

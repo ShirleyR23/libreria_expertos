@@ -104,10 +104,6 @@ class AuthService:
         # Crear cliente
         new_client = Client(
             user_id=new_user.id,
-            telefono=register_data.telefono,
-            direccion=register_data.direccion,
-            ciudad=register_data.ciudad,
-            codigo_postal=register_data.codigo_postal
         )
         self.db.add(new_client)
         log_action(self.db, new_user.id, "REGISTER_CLIENT", "users", new_user.id,

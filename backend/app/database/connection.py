@@ -55,8 +55,8 @@ def init_db() -> None:
     from app.models.sale import Sale, SaleItem, Invoice
     from app.models.purchase import Purchase, PurchaseItem
     from app.models.supplier import Supplier, SupplierBook
-    from app.models.review import Review          # ← NUEVO
-    from app.models.audit_log import AuditLog     # ← NUEVO
+    from app.models.review import Review          
+    from app.models.audit_log import AuditLog     
 
     # Crear tablas nuevas (no modifica las existentes)
     Base.metadata.create_all(bind=engine)
@@ -72,7 +72,7 @@ def init_db() -> None:
         from app.database.seed_nuevos_datos import run_seed
         run_seed(engine, SessionLocal, is_sqlite)
     except Exception as e:
-        print(f"⚠️  seed_nuevos_datos no se pudo ejecutar: {e}")
+        print(f"  seed_nuevos_datos no se pudo ejecutar: {e}")
 
 
 def _run_migrations() -> None:
@@ -91,7 +91,7 @@ def _run_migrations() -> None:
                 if "imagen_url" not in columns:
                     conn.execute(text("ALTER TABLE libros ADD COLUMN imagen_url VARCHAR(500)"))
                     conn.commit()
-                    print("✅ Migración: columna imagen_url agregada a libros")
+                    print(" Migración: columna imagen_url agregada a libros")
             else:
                 # PostgreSQL
                 from sqlalchemy import text
@@ -102,9 +102,9 @@ def _run_migrations() -> None:
                 if not result.fetchone():
                     conn.execute(text("ALTER TABLE libros ADD COLUMN imagen_url VARCHAR(500)"))
                     conn.commit()
-                    print("✅ Migración: columna imagen_url agregada a libros")
+                    print(" Migración: columna imagen_url agregada a libros")
         except Exception as e:
-            print(f"⚠️ Migración imagen_url: {e}")
+            print(f" Migración imagen_url: {e}")
 
         # Verificar y agregar precio_original a la tabla libros
         try:
@@ -115,7 +115,7 @@ def _run_migrations() -> None:
                 if "precio_original" not in columns:
                     conn.execute(text("ALTER TABLE libros ADD COLUMN precio_original NUMERIC(10, 2)"))
                     conn.commit()
-                    print("✅ Migración: columna precio_original agregada a libros")
+                    print(" Migración: columna precio_original agregada a libros")
             else:
                 from sqlalchemy import text
                 result = conn.execute(text(
@@ -125,9 +125,9 @@ def _run_migrations() -> None:
                 if not result.fetchone():
                     conn.execute(text("ALTER TABLE libros ADD COLUMN precio_original NUMERIC(10, 2)"))
                     conn.commit()
-                    print("✅ Migración: columna precio_original agregada a libros")
+                    print(" Migración: columna precio_original agregada a libros")
         except Exception as e:
-            print(f"⚠️ Migración precio_original: {e}")
+            print(f" Migración precio_original: {e}")
 
         # Migración: supplier_id en compras (referencia a proveedores)
         try:
@@ -139,7 +139,7 @@ def _run_migrations() -> None:
                     # SQLite no soporta FK en ALTER TABLE, se agrega sin FK
                     conn.execute(text("ALTER TABLE compras ADD COLUMN supplier_id INTEGER"))
                     conn.commit()
-                    print("✅ Migración: columna supplier_id agregada a compras")
+                    print(" Migración: columna supplier_id agregada a compras")
             else:
                 from sqlalchemy import text
                 result = conn.execute(text(
@@ -152,9 +152,9 @@ def _run_migrations() -> None:
                         "REFERENCES proveedores(id)"
                     ))
                     conn.commit()
-                    print("✅ Migración: columna supplier_id agregada a compras")
+                    print(" Migración: columna supplier_id agregada a compras")
         except Exception as e:
-            print(f"⚠️ Migración supplier_id: {e}")
+            print(f" Migración supplier_id: {e}")
 
         # Migración: pdf_url y pdf_preview_pages en libros
         try:
@@ -165,11 +165,11 @@ def _run_migrations() -> None:
                 if "pdf_url" not in columns:
                     conn.execute(text("ALTER TABLE libros ADD COLUMN pdf_url VARCHAR(500)"))
                     conn.commit()
-                    print("✅ Migración: columna pdf_url agregada a libros")
+                    print(" Migración: columna pdf_url agregada a libros")
                 if "pdf_preview_pages" not in columns:
                     conn.execute(text("ALTER TABLE libros ADD COLUMN pdf_preview_pages INTEGER DEFAULT 3"))
                     conn.commit()
-                    print("✅ Migración: columna pdf_preview_pages agregada a libros")
+                    print(" Migración: columna pdf_preview_pages agregada a libros")
             else:
                 from sqlalchemy import text
                 for col, definition in [("pdf_url", "VARCHAR(500)"), ("pdf_preview_pages", "INTEGER DEFAULT 3")]:
@@ -180,9 +180,9 @@ def _run_migrations() -> None:
                     if not result.fetchone():
                         conn.execute(text(f"ALTER TABLE libros ADD COLUMN {col} {definition}"))
                         conn.commit()
-                        print(f"✅ Migración: columna {col} agregada a libros")
+                        print(f" Migración: columna {col} agregada a libros")
         except Exception as e:
-            print(f"⚠️ Migración pdf_url/pdf_preview_pages: {e}")
+            print(f" Migración pdf_url/pdf_preview_pages: {e}")
 
 
 def seed_initial_data() -> None:
@@ -207,7 +207,7 @@ def seed_initial_data() -> None:
             ]
             db.add_all(roles)
             db.commit()
-            print("✅ Roles creados")
+            print(" Roles creados")
         
         # Verificar si ya hay categorías
         if db.query(BookCategory).first() is None:
@@ -226,7 +226,7 @@ def seed_initial_data() -> None:
             ]
             db.add_all(categories)
             db.commit()
-            print("✅ Categorías de libros creadas")
+            print(" Categorías de libros creadas")
         
         # Verificar si ya hay usuarios
         if db.query(User).first() is None:
@@ -288,7 +288,7 @@ def seed_initial_data() -> None:
             )
             db.add(cliente)
             db.commit()
-            print("✅ Usuarios de demo creados")
+            print(" Usuarios de demo creados")
         
         # Verificar si ya hay libros
         if db.query(Book).first() is None:
@@ -344,13 +344,13 @@ def seed_initial_data() -> None:
             ]
             db.add_all(books)
             db.commit()
-            print("✅ Libros de ejemplo creados")
+            print(" Libros de ejemplo creados")
         
-        print("✅ Base de datos inicializada correctamente")
+        print(" Base de datos inicializada correctamente")
         
     except Exception as e:
         db.rollback()
-        print(f"⚠️ Error al insertar datos iniciales: {e}")
+        print(f" Error al insertar datos iniciales: {e}")
         import traceback
         traceback.print_exc()
     finally:

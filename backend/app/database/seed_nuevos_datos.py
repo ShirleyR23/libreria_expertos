@@ -29,7 +29,7 @@ def run_seed(engine, SessionLocal, is_sqlite):
                 if col not in columnas:
                     conn.execute(text(f"ALTER TABLE libros ADD COLUMN {col} {definition}"))
                     conn.commit()
-                    print(f"✅ Migración: {col} agregada")
+                    print(f" Migración: {col} agregada")
         else:
             for col, definition in [
                 ("imagen_url",        "VARCHAR(500)"),
@@ -43,7 +43,7 @@ def run_seed(engine, SessionLocal, is_sqlite):
                 if not result.fetchone():
                     conn.execute(text(f"ALTER TABLE libros ADD COLUMN {col} {definition}"))
                     conn.commit()
-                    print(f"✅ Migración: {col} agregada")
+                    print(f" Migración: {col} agregada")
 
     # ─────────────────────────────────────────────────────────────
     # 2. ROL GERENTE
@@ -59,7 +59,7 @@ def run_seed(engine, SessionLocal, is_sqlite):
                 description="Gerente / Supervisor — Acceso de lectura y análisis completo"
             ))
             db.commit()
-            print("✅ Rol GERENTE creado")
+            print(" Rol GERENTE creado")
 
         # ─────────────────────────────────────────────────────────
         # 3. USUARIO GERENTE DEMO
@@ -84,7 +84,7 @@ def run_seed(engine, SessionLocal, is_sqlite):
                 direccion="Oficina Central"
             ))
             db.commit()
-            print("✅ Usuario gerente@honduletras.com creado (contraseña: gerente123)")
+            print(" Usuario gerente@honduletras.com creado (contraseña: gerente123)")
 
         # ─────────────────────────────────────────────────────────
         # 4. LIBROS NUEVOS
@@ -202,9 +202,9 @@ def run_seed(engine, SessionLocal, is_sqlite):
 
         if agregados > 0:
             db.commit()
-            print(f"✅ {agregados} libros nuevos agregados")
+            print(f" {agregados} libros nuevos agregados")
         else:
-            print("ℹ️  Libros nuevos ya existían, no se agregaron duplicados")
+            print("  Libros nuevos ya existían, no se agregaron duplicados")
 
         # ─────────────────────────────────────────────────────────
         # 5. ASIGNAR PORTADAS Y PDFs via UPDATE
@@ -276,13 +276,13 @@ def run_seed(engine, SessionLocal, is_sqlite):
 
         if resetados > 0:
             db.commit()
-            print(f"✅ Ventas reseteadas a 0 en {resetados} libros (ranking ahora es real)")
+            print(f" Ventas reseteadas a 0 en {resetados} libros (ranking ahora es real)")
         else:
-            print("ℹ️  Ventas ya estaban en 0, sin cambios")
+            print(" Ventas ya estaban en 0, sin cambios")
 
     except Exception as e:
         db.rollback()
-        print(f"⚠️  Error en seed_nuevos_datos: {e}")
+        print(f" Error en seed_nuevos_datos: {e}")
         import traceback
         traceback.print_exc()
     finally:
